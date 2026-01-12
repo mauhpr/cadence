@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cadence"
+name = "cadence-orchestration"
 version = "0.3.0"
 description = "A declarative Python framework for orchestrating service logic with rhythm and precision"
 readme = "README.md"
