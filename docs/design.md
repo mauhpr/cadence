@@ -405,9 +405,16 @@ def my_merge(original: Score, changes: list[dict]) -> None:
 
 ---
 
+## Current Capabilities
+
+The following features are available:
+
+- **Workflow Visualization** - `to_mermaid()`, `to_dot()`, `to_svg()`, `save_diagram()` + CLI `cadence diagram` command
+- **Debugging Tools** - `DebugHooks` for detailed execution output with score state
+- **Performance Tracking** - `TimingHooks` for per-note execution timing
+
 ## Future Directions
 
-- **Workflow Visualization** - Interactive diagram rendering
-- **Debugging Tools** - Step-through execution
-- **Performance Profiling** - Built-in profiling hooks
-- **OpenAPI Integration** - Generate API specs from cadences
+- **Interactive Debugging** - Step-through execution with pause/resume
+- **Memory Profiling** - Built-in memory usage tracking and flame graphs
+- **OpenAPI Integration** - Generate API specs from cadence definitions
