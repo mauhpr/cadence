@@ -273,23 +273,34 @@ cadence/
 │       ├── note.py              # Note decorator
 │       ├── result.py            # Result types (Ok, Err)
 │       ├── exceptions.py        # Exception classes
-│       ├── resilience.py        # Retry, timeout, fallback, circuit breaker
+│       ├── types.py             # Type definitions
 │       ├── hooks.py             # Hooks system
 │       ├── diagram.py           # Cadence diagram generation
 │       ├── cli.py               # CLI commands
-│       ├── reporters.py         # Time reporters
-│       ├── measures/            # Measure implementations
+│       ├── nodes/               # Node (Measure) implementations
 │       │   ├── base.py
 │       │   ├── single.py
 │       │   ├── sequence.py
 │       │   ├── parallel.py
 │       │   ├── branch.py
 │       │   └── child.py
+│       ├── resilience/          # Resilience patterns
+│       │   ├── retry.py
+│       │   ├── timeout.py
+│       │   ├── fallback.py
+│       │   └── circuit_breaker.py
+│       ├── reporters/           # Metrics reporters
+│       │   ├── console.py
+│       │   ├── prometheus.py
+│       │   └── opentelemetry.py
 │       └── integrations/        # Framework integrations
 │           ├── fastapi.py
 │           └── flask.py
 ├── tests/                       # Test files
 ├── examples/                    # Example code
+│   ├── basic/                   # Getting started examples
+│   ├── intermediate/            # Branching, parallelism, hooks
+│   └── advanced/                # Framework integration, testing
 ├── docs/                        # Documentation
 └── pyproject.toml              # Project configuration
 ```

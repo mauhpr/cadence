@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-01-14
+
+### Added
+
+- **Comprehensive Test Suite**: 309 tests with 77% code coverage
+  - Unit tests for all hook classes (LoggingHooks, TimingHooks, MetricsHooks, etc.)
+  - Node/Measure tests (SingleMeasure, SequenceMeasure, BranchMeasure, ChildCadenceMeasure)
+  - Integration tests for FastAPI and Flask
+  - Edge case tests (cancellation, concurrent failures, empty workflows)
+  - Reporter tests (console, JSON, Prometheus, OpenTelemetry)
+- **Reorganized Examples**: Examples now organized by complexity level
+  - `examples/basic/` - Getting started examples
+  - `examples/intermediate/` - Branching, parallelism, hooks, child composition
+  - `examples/advanced/` - Framework integration, resilience, testing patterns
+- **New Examples**:
+  - `child_composition.py` - Child cadence composition patterns
+  - `testing_workflows.py` - Comprehensive testing patterns and best practices
+- **CI/CD Improvements**:
+  - GitHub Actions workflow with pip caching and coverage threshold
+  - Codecov integration with `.codecov.yml` configuration
+  - Coverage reporting with 70% minimum threshold
+
 ### Changed
 
 - **BREAKING**: Complete API rename from ServiceFlow to Cadence with musical theme
@@ -27,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `FlowBlueprint` renamed to `CadenceBlueprint` (Flask)
   - CLI command renamed from `serviceflow` to `cadence`
   - CLI: `cadence new beat` renamed to `cadence new note`
+  - Internal file renames for consistency:
+    - `flow.py` → `cadence.py`
+    - `state.py` → `score.py`
+    - `step.py` → `note.py`
 
 ## [0.3.0] - 2025-01-10
 
@@ -103,7 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom Exceptions**: `CadenceError`, `NoteError`, `TimeoutError`, `RetryExhaustedError`
 - Basic test suite with pytest and pytest-asyncio
 
-[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mauhpr/cadence/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mauhpr/cadence/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mauhpr/cadence/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mauhpr/cadence/releases/tag/v0.1.0

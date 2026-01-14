@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from cadence.nodes.base import Measure
 
 if TYPE_CHECKING:
-    from cadence.flow import Cadence
+    from cadence.cadence import Cadence
 
 ScoreT = TypeVar("ScoreT")
 ChildScoreT = TypeVar("ChildScoreT")

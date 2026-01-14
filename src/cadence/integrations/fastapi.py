@@ -22,8 +22,8 @@ except ImportError:
     HAS_FASTAPI = False
 
 from cadence.exceptions import CadenceError
-from cadence.flow import Cadence
-from cadence.state import Score
+from cadence.cadence import Cadence
+from cadence.score import Score
 
 ScoreT = TypeVar("ScoreT", bound=Score)
 ResponseT = TypeVar("ResponseT")

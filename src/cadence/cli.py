@@ -353,7 +353,7 @@ def validate_command(args: argparse.Namespace) -> int:
         print(f"Error importing module: {e}")
         return 1
 
-    from cadence.flow import Cadence
+    from cadence.cadence import Cadence
 
     # Find all cadences in module
     if attrs_to_check is None:

@@ -149,7 +149,7 @@ class TestMergeStrategies:
 
         # Custom parallel node would be needed for custom strategy
         # For now, test the merge strategy directly
-        from cadence.state import merge_snapshots
+        from cadence.score import merge_snapshots
 
         snap1 = score._snapshot()
         snap1.shared_list = ["A"]
@@ -167,7 +167,7 @@ class TestMergeStrategies:
         score = ParallelTestScore()
         score.__post_init__()
 
-        from cadence.state import merge_snapshots
+        from cadence.score import merge_snapshots
 
         snap1 = score._snapshot()
         snap1.shared_value = "first"

@@ -32,7 +32,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from cadence.flow import Cadence
+    from cadence.cadence import Cadence
 
 
 class MeasureShape(Enum):

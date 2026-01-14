@@ -1,8 +1,16 @@
-"""
-FastAPI Integration Example - User Registration API
+"""FastAPI Integration Example - User Registration API.
 
 This example demonstrates using Cadence with FastAPI to build
 a user registration API with validation, enrichment, and notifications.
+
+SECURITY NOTE:
+    This example uses mock implementations for demonstration purposes.
+    For production use:
+    - Use bcrypt or argon2 for password hashing (see hash_password note)
+    - Implement proper rate limiting
+    - Use HTTPS and secure headers
+    - Validate and sanitize all inputs
+    - Store secrets in environment variables or a secrets manager
 """
 
 import asyncio
@@ -176,9 +184,25 @@ async def check_username_availability(score: RegistrationScore) -> None:
 
 @note
 def hash_password(score: RegistrationScore) -> None:
-    """Hash the user's password."""
-    # In production, use bcrypt or argon2
-    score.password_hash = f"hashed_{score.password[::-1]}"
+    """Hash the user's password.
+
+    WARNING: This is a mock implementation for demonstration purposes only.
+    In production, ALWAYS use a proper password hashing library:
+
+        import bcrypt
+        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+
+    Or using argon2:
+        from argon2 import PasswordHasher
+        ph = PasswordHasher()
+        password_hash = ph.hash(password)
+    """
+    # Mock hash - uses hash() to create a non-reversible representation
+    # NEVER use this in production - use bcrypt or argon2
+    score.password_hash = f"mock_hash_{hash(score.password) % 10**10:010d}"
+
+    # Clear plaintext password from memory after hashing
+    score.password = ""
 
 
 @note

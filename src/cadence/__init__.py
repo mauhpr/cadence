@@ -31,7 +31,7 @@ from cadence.diagram import (
     to_mermaid,
 )
 from cadence.exceptions import CadenceError, NoteError, RetryExhaustedError, TimeoutError
-from cadence.flow import Cadence
+from cadence.cadence import Cadence
 from cadence.hooks import (
     CadenceHooks,
     DebugHooks,
@@ -52,7 +52,7 @@ from cadence.resilience import (
     timeout,
 )
 from cadence.result import Err, Ok, Result, err, ok
-from cadence.state import (
+from cadence.score import (
     Atomic,
     AtomicDict,
     AtomicList,
@@ -62,9 +62,9 @@ from cadence.state import (
     Score,
     merge_snapshots,
 )
-from cadence.step import Note, note
+from cadence.note import Note, note
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     # Core

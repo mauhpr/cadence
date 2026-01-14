@@ -32,7 +32,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from cadence.flow import Cadence
+    from cadence.cadence import Cadence
 
 ScoreT = TypeVar("ScoreT")
 
@@ -114,7 +114,7 @@ def cadence_route(
                     score.__post_init__()
 
                 # Clone cadence with new score
-                from cadence.flow import Cadence
+                from cadence.cadence import Cadence
                 cadence_instance = Cadence(cadence._name, score)
                 cadence_instance._measures = cadence._measures
                 cadence_instance._time_reporter = cadence._time_reporter
@@ -295,7 +295,7 @@ class CadenceBlueprint:
                     score.__post_init__()
 
                 # Clone and run cadence
-                from cadence.flow import Cadence
+                from cadence.cadence import Cadence
                 cadence_instance = Cadence(cadence._name, score)
                 cadence_instance._measures = cadence._measures
                 cadence_instance._time_reporter = cadence._time_reporter

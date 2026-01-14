@@ -20,8 +20,8 @@ from cadence.nodes.child import ChildCadenceMeasure
 from cadence.nodes.parallel import ParallelMeasure
 from cadence.nodes.sequence import SequenceMeasure
 from cadence.nodes.single import SingleMeasure
-from cadence.state import MergeStrategy
-from cadence.step import Note
+from cadence.score import MergeStrategy
+from cadence.note import Note
 
 
 def _is_async_callable(obj: Any) -> bool:
