@@ -23,6 +23,7 @@ Example:
     )
 """
 
+from cadence.cadence import Cadence
 from cadence.diagram import (
     print_cadence,
     render_svg,
@@ -31,7 +32,6 @@ from cadence.diagram import (
     to_mermaid,
 )
 from cadence.exceptions import CadenceError, NoteError, RetryExhaustedError, TimeoutError
-from cadence.cadence import Cadence
 from cadence.hooks import (
     CadenceHooks,
     DebugHooks,
@@ -41,6 +41,7 @@ from cadence.hooks import (
     TimingHooks,
     TracingHooks,
 )
+from cadence.note import Note, note
 from cadence.reporters import console_reporter, json_reporter
 from cadence.resilience import (
     CircuitBreaker,
@@ -62,7 +63,6 @@ from cadence.score import (
     Score,
     merge_snapshots,
 )
-from cadence.note import Note, note
 
 __version__ = "0.4.0"
 

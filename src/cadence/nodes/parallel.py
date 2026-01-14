@@ -9,8 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypeVar
 
 from cadence.nodes.base import Measure
-from cadence.score import MergeStrategy, Score, merge_snapshots
 from cadence.note import Note
+from cadence.score import MergeStrategy, Score, merge_snapshots
 
 ScoreT = TypeVar("ScoreT")
 
