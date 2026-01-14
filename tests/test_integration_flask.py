@@ -23,6 +23,8 @@ try:
     HAS_FLASK = True
 except ImportError:
     HAS_FLASK = False
+    Flask = None  # type: ignore[misc, assignment]
+    FlaskClient = None  # type: ignore[misc, assignment]
 
 pytestmark = pytest.mark.skipif(not HAS_FLASK, reason="Flask not installed")
 
