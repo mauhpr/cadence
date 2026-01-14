@@ -175,6 +175,8 @@ async def slow_operation(score):
     score.result = await long_running_task()
 ```
 
+> **Note:** On Windows, the `@timeout` decorator only works with async functions. Sync function timeouts require Unix signals (`SIGALRM`) which are not available on Windows.
+
 ### Fallback
 
 ```python

@@ -418,3 +418,4 @@ The following features are available:
 - **Interactive Debugging** - Step-through execution with pause/resume
 - **Memory Profiling** - Built-in memory usage tracking and flame graphs
 - **OpenAPI Integration** - Generate API specs from cadence definitions
+- **Windows Sync Timeout Support** - Cross-platform timeout for synchronous functions using threading
