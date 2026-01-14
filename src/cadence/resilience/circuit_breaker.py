@@ -23,7 +23,7 @@ class CircuitState(Enum):
 class CircuitOpenError(Exception):
     """Raised when circuit is open and request is blocked."""
 
-    def __init__(self, name: str, retry_after: float):
+    def __init__(self, name: str, retry_after: float) -> None:
         self.name = name
         self.retry_after = retry_after
         super().__init__(
@@ -54,7 +54,7 @@ class CircuitBreaker:
         recovery_timeout: float = 30.0,
         half_open_max_calls: int = 1,
         excluded_exceptions: tuple[type[Exception], ...] | None = None,
-    ):
+    ) -> None:
         """
         Initialize circuit breaker.
 
@@ -81,13 +81,15 @@ class CircuitBreaker:
     def state(self) -> CircuitState:
         """Get current state, checking for automatic transitions."""
         with self._lock:
-            if self._state == CircuitState.OPEN:
+            if (
+                self._state == CircuitState.OPEN
+                and self._last_failure_time is not None
+            ):
                 # Check if recovery timeout has passed
-                if self._last_failure_time is not None:
-                    elapsed = time.monotonic() - self._last_failure_time
-                    if elapsed >= self.recovery_timeout:
-                        self._state = CircuitState.HALF_OPEN
-                        self._half_open_calls = 0
+                elapsed = time.monotonic() - self._last_failure_time
+                if elapsed >= self.recovery_timeout:
+                    self._state = CircuitState.HALF_OPEN
+                    self._half_open_calls = 0
             return self._state
 
     def _record_success(self) -> None:
@@ -199,17 +201,17 @@ def circuit_breaker(
         excluded_exceptions: Exceptions that don't count as failures
 
     Example:
-        @beat
+        @note
         @circuit_breaker(failure_threshold=5, recovery_timeout=30)
-        async def call_external_service(ctx):
+        async def call_external_service(score):
             return await external_api.call()
 
         # Multiple functions can share a circuit:
         @circuit_breaker(name="payment-api", failure_threshold=3)
-        async def charge_card(ctx): ...
+        async def charge_card(score): ...
 
         @circuit_breaker(name="payment-api", failure_threshold=3)
-        async def refund_card(ctx): ...
+        async def refund_card(score): ...
     """
 
     def decorator(func: F) -> F:

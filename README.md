@@ -8,7 +8,7 @@
 
 **A declarative Python framework for building service logic with explicit control flow.**
 
-Cadence lets you build complex service orchestration with a clean, readable API. Define your business logic as composable beats, handle errors gracefully, and scale with confidence.
+Cadence lets you build complex service orchestration with a clean, readable API. Define your business logic as composable notes, handle errors gracefully, and scale with confidence.
 
 ## Features
 
@@ -50,32 +50,32 @@ pip install cadence-orchestration[all]
 
 ```python
 from dataclasses import dataclass
-from cadence import Cadence, Context, beat
+from cadence import Cadence, Score, note
 
 @dataclass
-class OrderContext(Context):
+class OrderScore(Score):
     order_id: str
     items: list = None
     total: float = 0.0
     status: str = "pending"
 
-@beat
-async def fetch_items(ctx: OrderContext):
+@note
+async def fetch_items(score: OrderScore):
     # Fetch order items from database
-    ctx.items = await db.get_items(ctx.order_id)
+    score.items = await db.get_items(score.order_id)
 
-@beat
-async def calculate_total(ctx: OrderContext):
-    ctx.total = sum(item.price for item in ctx.items)
+@note
+async def calculate_total(score: OrderScore):
+    score.total = sum(item.price for item in score.items)
 
-@beat
-async def process_payment(ctx: OrderContext):
-    await payment_service.charge(ctx.order_id, ctx.total)
-    ctx.status = "paid"
+@note
+async def process_payment(score: OrderScore):
+    await payment_service.charge(score.order_id, score.total)
+    score.status = "paid"
 
 # Build and run the cadence
 cadence = (
-    Cadence("checkout", OrderContext(order_id="ORD-123"))
+    Cadence("checkout", OrderScore(order_id="ORD-123"))
     .then("fetch_items", fetch_items)
     .then("calculate_total", calculate_total)
     .then("process_payment", process_payment)
@@ -87,26 +87,26 @@ print(f"Order {result.order_id}: {result.status}")
 
 ## Core Concepts
 
-### Sequential Beats
+### Sequential Notes
 
-Execute beats one after another:
+Execute notes one after another:
 
 ```python
 cadence = (
-    Cadence("process", MyContext())
-    .then("beat1", do_first)
-    .then("beat2", do_second)
-    .then("beat3", do_third)
+    Cadence("process", MyScore())
+    .then("note1", do_first)
+    .then("note2", do_second)
+    .then("note3", do_third)
 )
 ```
 
 ### Parallel Execution
 
-Run independent tasks concurrently with automatic context isolation:
+Run independent tasks concurrently with automatic score isolation:
 
 ```python
 cadence = (
-    Cadence("enrich", UserContext(user_id="123"))
+    Cadence("enrich", UserScore(user_id="123"))
     .sync("fetch_data", [
         fetch_profile,
         fetch_preferences,
@@ -122,7 +122,7 @@ Route execution based on runtime conditions:
 
 ```python
 cadence = (
-    Cadence("order", OrderContext())
+    Cadence("order", OrderScore())
     .then("validate", validate_order)
     .split("route",
         condition=is_premium_customer,
@@ -138,11 +138,11 @@ cadence = (
 Compose cadences for complex orchestration:
 
 ```python
-payment_cadence = Cadence("payment", PaymentContext())...
-shipping_cadence = Cadence("shipping", ShippingContext())...
+payment_cadence = Cadence("payment", PaymentScore())...
+shipping_cadence = Cadence("shipping", ShippingScore())...
 
 checkout_cadence = (
-    Cadence("checkout", CheckoutContext())
+    Cadence("checkout", CheckoutScore())
     .then("prepare", prepare_order)
     .child("process_payment", payment_cadence, merge_payment)
     .child("arrange_shipping", shipping_cadence, merge_shipping)
@@ -158,10 +158,10 @@ checkout_cadence = (
 from cadence import retry
 
 @retry(max_attempts=3, delay=1.0, backoff=2.0)
-@beat
-async def call_external_api(ctx):
-    response = await http_client.get(ctx.api_url)
-    ctx.data = response.json()
+@note
+async def call_external_api(score):
+    response = await http_client.get(score.api_url)
+    score.data = response.json()
 ```
 
 ### Timeout
@@ -170,9 +170,9 @@ async def call_external_api(ctx):
 from cadence import timeout
 
 @timeout(seconds=5.0)
-@beat
-async def slow_operation(ctx):
-    ctx.result = await long_running_task()
+@note
+async def slow_operation(score):
+    score.result = await long_running_task()
 ```
 
 ### Fallback
@@ -181,9 +181,9 @@ async def slow_operation(ctx):
 from cadence import fallback
 
 @fallback(default={"status": "unknown"})
-@beat
-async def get_status(ctx):
-    ctx.status = await status_service.get(ctx.id)
+@note
+async def get_status(score):
+    score.status = await status_service.get(score.id)
 ```
 
 ### Circuit Breaker
@@ -192,9 +192,9 @@ async def get_status(ctx):
 from cadence import circuit_breaker
 
 @circuit_breaker(failure_threshold=5, recovery_timeout=30.0)
-@beat
-async def call_fragile_service(ctx):
-    ctx.data = await fragile_service.fetch()
+@note
+async def call_fragile_service(score):
+    score.data = await fragile_service.fetch()
 ```
 
 ## Framework Integration
@@ -210,7 +210,7 @@ router = CadenceRouter()
 
 @router.cadence("/orders/{order_id}", checkout_cadence)
 async def create_order(order_id: str):
-    return OrderContext(order_id=order_id)
+    return OrderScore(order_id=order_id)
 
 app.include_router(router)
 ```
@@ -226,7 +226,7 @@ bp = CadenceBlueprint("orders", __name__)
 
 @bp.cadence_route("/orders/<order_id>", checkout_cadence)
 def create_order(order_id):
-    return OrderContext(order_id=order_id)
+    return OrderScore(order_id=order_id)
 
 app.register_blueprint(bp)
 ```
@@ -239,10 +239,10 @@ app.register_blueprint(bp)
 from cadence import Cadence, LoggingHooks, TimingHooks
 
 cadence = (
-    Cadence("monitored", MyContext())
+    Cadence("monitored", MyScore())
     .with_hooks(LoggingHooks())
     .with_hooks(TimingHooks())
-    .then("beat1", do_work)
+    .then("note1", do_work)
 )
 ```
 
@@ -252,14 +252,14 @@ cadence = (
 from cadence import CadenceHooks
 
 class MyHooks(CadenceHooks):
-    async def before_beat(self, beat_name, context):
-        print(f"Starting: {beat_name}")
+    async def before_note(self, note_name, score):
+        print(f"Starting: {note_name}")
 
-    async def after_beat(self, beat_name, context, duration, error=None):
-        print(f"Completed: {beat_name} in {duration:.2f}s")
+    async def after_note(self, note_name, score, duration, error=None):
+        print(f"Completed: {note_name} in {duration:.2f}s")
 
-    async def on_error(self, beat_name, context, error):
-        alert_team(f"Error in {beat_name}: {error}")
+    async def on_error(self, note_name, score, error):
+        alert_team(f"Error in {note_name}: {error}")
 ```
 
 ### Prometheus Metrics
@@ -270,9 +270,9 @@ from cadence.reporters import PrometheusReporter
 reporter = PrometheusReporter(prefix="myapp")
 
 cadence = (
-    Cadence("tracked", MyContext())
+    Cadence("tracked", MyScore())
     .with_reporter(reporter.report)
-    .then("beat1", do_work)
+    .then("note1", do_work)
 )
 ```
 
@@ -284,9 +284,9 @@ from cadence.reporters import OpenTelemetryReporter
 reporter = OpenTelemetryReporter(service_name="my-service")
 
 cadence = (
-    Cadence("traced", MyContext())
+    Cadence("traced", MyScore())
     .with_reporter(reporter.report)
-    .then("beat1", do_work)
+    .then("note1", do_work)
 )
 ```
 
@@ -315,8 +315,8 @@ cadence init my-project
 # Generate a new cadence
 cadence new cadence checkout
 
-# Generate a new beat with resilience decorators
-cadence new beat process-payment --retry 3 --timeout 30
+# Generate a new note with resilience decorators
+cadence new note process-payment --retry 3 --timeout 30
 
 # Generate cadence diagram
 cadence diagram myapp.cadences:checkout_cadence --format mermaid
@@ -325,33 +325,33 @@ cadence diagram myapp.cadences:checkout_cadence --format mermaid
 cadence validate myapp.cadences
 ```
 
-## Context Management
+## Score Management
 
-### Immutable Context
+### Immutable Score
 
 For functional-style cadences:
 
 ```python
-from cadence import ImmutableContext
+from cadence import ImmutableScore
 
 @dataclass(frozen=True)
-class Config(ImmutableContext):
+class Config(ImmutableScore):
     api_key: str
     timeout: int = 30
 
-# Create new context with changes
+# Create new score with changes
 new_config = config.with_field("timeout", 60)
 ```
 
 ### Atomic Operations
 
-Thread-safe context updates for parallel execution:
+Thread-safe score updates for parallel execution:
 
 ```python
-from cadence import Context, AtomicList, AtomicDict
+from cadence import Score, AtomicList, AtomicDict
 
 @dataclass
-class AggregatorContext(Context):
+class AggregatorScore(Score):
     results: AtomicList = None
     cache: AtomicDict = None
 
@@ -361,26 +361,26 @@ class AggregatorContext(Context):
         self.cache = AtomicDict()
 
 # Safe concurrent updates
-ctx.results.append(new_result)
-ctx.cache["key"] = value
+score.results.append(new_result)
+score.cache["key"] = value
 ```
 
 ## Error Handling
 
 ```python
-from cadence import CadenceError, BeatError
+from cadence import CadenceError, NoteError
 
 cadence = (
-    Cadence("handled", MyContext())
+    Cadence("handled", MyScore())
     .then("risky", risky_operation)
     .on_error(handle_error, stop=False)  # Continue on error
     .then("cleanup", cleanup)
 )
 
-async def handle_error(context, error):
-    if isinstance(error, BeatError):
-        logger.error(f"Beat {error.beat_name} failed: {error}")
-        context.errors.append(str(error))
+async def handle_error(score, error):
+    if isinstance(error, NoteError):
+        logger.error(f"Note {error.note_name} failed: {error}")
+        score.errors.append(str(error))
 ```
 
 ## Documentation

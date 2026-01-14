@@ -1,4 +1,4 @@
-"""Child cadence composition node."""
+"""Child cadence composition measure."""
 
 from __future__ import annotations
 
@@ -6,30 +6,30 @@ import inspect
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from cadence.nodes.base import Node
+from cadence.nodes.base import Measure
 
 if TYPE_CHECKING:
     from cadence.flow import Cadence
 
-ContextT = TypeVar("ContextT")
-ChildContextT = TypeVar("ChildContextT")
+ScoreT = TypeVar("ScoreT")
+ChildScoreT = TypeVar("ChildScoreT")
 
 
-class ChildCadenceNode(Node[ContextT]):
+class ChildCadenceMeasure(Measure[ScoreT]):
     """
     Composes a child cadence into the parent cadence.
 
-    Runs the child cadence and merges its context back to parent.
+    Runs the child cadence and merges its score back to parent.
     """
 
     def __init__(
         self,
-        context: ContextT,
+        score: ScoreT,
         name: str,
-        child_cadence: Cadence[ChildContextT],
-        merge: Callable[[ContextT, ChildContextT], Any],
+        child_cadence: Cadence[ChildScoreT],
+        merge: Callable[[ScoreT, ChildScoreT], Any],
     ) -> None:
-        super().__init__(context, name)
+        super().__init__(score, name)
         self._child_cadence = child_cadence
         self._merge = merge
 
@@ -38,11 +38,11 @@ class ChildCadenceNode(Node[ContextT]):
         # Execute child cadence
         await self._child_cadence.run()
 
-        # Get child context
-        child_context = self._child_cadence.get_context()
+        # Get child score
+        child_score = self._child_cadence.get_score()
 
-        # Merge child context into parent
-        result = self._merge(self._context, child_context)
+        # Merge child score into parent
+        result = self._merge(self._score, child_score)
         if inspect.iscoroutine(result):
             await result
 

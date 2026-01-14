@@ -1,16 +1,16 @@
-"""Tests for parallel execution with copy-on-write context."""
+"""Tests for parallel execution with copy-on-write score."""
 
 import pytest
 import asyncio
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from cadence import Cadence, Context, beat, MergeConflict, MergeStrategy, BeatError
+from cadence import Cadence, Score, note, MergeConflict, MergeStrategy, NoteError
 
 
 @dataclass
-class ParallelTestContext(Context):
-    """Context for parallel execution tests."""
+class ParallelTestScore(Score):
+    """Score for parallel execution tests."""
     task_a_result: Optional[str] = None
     task_b_result: Optional[str] = None
     task_c_result: Optional[str] = None
@@ -18,66 +18,66 @@ class ParallelTestContext(Context):
     shared_value: Optional[str] = None
 
 
-@beat
-async def task_a(ctx: ParallelTestContext) -> None:
+@note
+async def task_a(score: ParallelTestScore) -> None:
     """Task that sets task_a_result."""
     await asyncio.sleep(0.01)
-    ctx.task_a_result = "A"
+    score.task_a_result = "A"
 
 
-@beat
-async def task_b(ctx: ParallelTestContext) -> None:
+@note
+async def task_b(score: ParallelTestScore) -> None:
     """Task that sets task_b_result."""
     await asyncio.sleep(0.01)
-    ctx.task_b_result = "B"
+    score.task_b_result = "B"
 
 
-@beat
-async def task_c(ctx: ParallelTestContext) -> None:
+@note
+async def task_c(score: ParallelTestScore) -> None:
     """Task that sets task_c_result."""
     await asyncio.sleep(0.01)
-    ctx.task_c_result = "C"
+    score.task_c_result = "C"
 
 
-@beat
-async def append_a(ctx: ParallelTestContext) -> None:
+@note
+async def append_a(score: ParallelTestScore) -> None:
     """Task that appends to shared list."""
-    if ctx.shared_list is None:
-        ctx.shared_list = []
-    ctx.shared_list.append("A")
+    if score.shared_list is None:
+        score.shared_list = []
+    score.shared_list.append("A")
 
 
-@beat
-async def append_b(ctx: ParallelTestContext) -> None:
+@note
+async def append_b(score: ParallelTestScore) -> None:
     """Task that appends to shared list."""
-    if ctx.shared_list is None:
-        ctx.shared_list = []
-    ctx.shared_list.append("B")
+    if score.shared_list is None:
+        score.shared_list = []
+    score.shared_list.append("B")
 
 
-@beat
-async def set_shared_1(ctx: ParallelTestContext) -> None:
+@note
+async def set_shared_1(score: ParallelTestScore) -> None:
     """Task that sets shared value to 1."""
-    ctx.shared_value = "value1"
+    score.shared_value = "value1"
 
 
-@beat
-async def set_shared_2(ctx: ParallelTestContext) -> None:
+@note
+async def set_shared_2(score: ParallelTestScore) -> None:
     """Task that sets shared value to 2."""
-    ctx.shared_value = "value2"
+    score.shared_value = "value2"
 
 
 class TestParallelExecution:
-    """Test parallel node execution with context isolation."""
+    """Test parallel measure execution with score isolation."""
 
     @pytest.mark.asyncio
     async def test_sync_different_fields(self):
         """Test parallel tasks writing to different fields."""
-        ctx = ParallelTestContext()
-        ctx.__post_init__()
+        score = ParallelTestScore()
+        score.__post_init__()
 
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .sync("tasks", [task_a, task_b, task_c])
         )
 
@@ -90,16 +90,16 @@ class TestParallelExecution:
     @pytest.mark.asyncio
     async def test_sync_conflict_detection(self):
         """Test that conflicting writes are detected."""
-        ctx = ParallelTestContext()
-        ctx.__post_init__()
+        score = ParallelTestScore()
+        score.__post_init__()
 
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .sync("tasks", [set_shared_1, set_shared_2])
         )
 
-        # MergeConflict is wrapped in BeatError by Cadence.run()
-        with pytest.raises(BeatError) as exc_info:
+        # MergeConflict is wrapped in NoteError by Cadence.run()
+        with pytest.raises(NoteError) as exc_info:
             await cadence.run()
 
         # The original MergeConflict should be the cause
@@ -111,22 +111,22 @@ class TestParallelExecution:
         """Test that parallel tasks don't see each other's changes."""
         changes_seen = []
 
-        @beat
-        async def check_isolation(ctx: ParallelTestContext) -> None:
+        @note
+        async def check_isolation(score: ParallelTestScore) -> None:
             # Record what we see at start
             changes_seen.append({
-                "a": ctx.task_a_result,
-                "b": ctx.task_b_result,
+                "a": score.task_a_result,
+                "b": score.task_b_result,
             })
             await asyncio.sleep(0.02)
             # Set our value
-            ctx.task_a_result = "from_check"
+            score.task_a_result = "from_check"
 
-        ctx = ParallelTestContext()
-        ctx.__post_init__()
+        score = ParallelTestScore()
+        score.__post_init__()
 
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .sync("tasks", [check_isolation, task_b])
         )
 
@@ -144,40 +144,40 @@ class TestMergeStrategies:
     @pytest.mark.asyncio
     async def test_smart_merge_lists(self):
         """Test smart merge combines lists from parallel tasks."""
-        ctx = ParallelTestContext()
-        ctx.__post_init__()
+        score = ParallelTestScore()
+        score.__post_init__()
 
         # Custom parallel node would be needed for custom strategy
         # For now, test the merge strategy directly
         from cadence.state import merge_snapshots
 
-        snap1 = ctx._snapshot()
+        snap1 = score._snapshot()
         snap1.shared_list = ["A"]
 
-        snap2 = ctx._snapshot()
+        snap2 = score._snapshot()
         snap2.shared_list = ["B"]
 
-        merge_snapshots(ctx, [snap1, snap2], MergeStrategy.smart_merge)
+        merge_snapshots(score, [snap1, snap2], MergeStrategy.smart_merge)
 
-        assert ctx.shared_list == ["A", "B"]
+        assert score.shared_list == ["A", "B"]
 
     @pytest.mark.asyncio
     async def test_last_write_wins(self):
         """Test last_write_wins ignores conflicts."""
-        ctx = ParallelTestContext()
-        ctx.__post_init__()
+        score = ParallelTestScore()
+        score.__post_init__()
 
         from cadence.state import merge_snapshots
 
-        snap1 = ctx._snapshot()
+        snap1 = score._snapshot()
         snap1.shared_value = "first"
 
-        snap2 = ctx._snapshot()
+        snap2 = score._snapshot()
         snap2.shared_value = "second"
 
-        merge_snapshots(ctx, [snap1, snap2], MergeStrategy.last_write_wins)
+        merge_snapshots(score, [snap1, snap2], MergeStrategy.last_write_wins)
 
-        assert ctx.shared_value == "second"
+        assert score.shared_value == "second"
 
 
 class TestMixedSyncAsync:
@@ -186,20 +186,20 @@ class TestMixedSyncAsync:
     @pytest.mark.asyncio
     async def test_sync_and_async_parallel(self):
         """Test parallel execution of mixed sync/async tasks."""
-        @beat
-        def sync_task(ctx: ParallelTestContext) -> None:
-            ctx.task_a_result = "sync"
+        @note
+        def sync_task(score: ParallelTestScore) -> None:
+            score.task_a_result = "sync"
 
-        @beat
-        async def async_task(ctx: ParallelTestContext) -> None:
+        @note
+        async def async_task(score: ParallelTestScore) -> None:
             await asyncio.sleep(0.01)
-            ctx.task_b_result = "async"
+            score.task_b_result = "async"
 
-        ctx = ParallelTestContext()
-        ctx.__post_init__()
+        score = ParallelTestScore()
+        score.__post_init__()
 
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .sync("mixed", [sync_task, async_task])
         )
 

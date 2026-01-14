@@ -4,19 +4,19 @@ Cadence - A declarative Python framework for orchestrating service logic with rh
 Build APIs and services with explicit, composable control flow.
 
 Example:
-    from cadence import Cadence, Context, beat
+    from cadence import Cadence, Score, note
 
     @dataclass
-    class OrderContext(Context):
+    class OrderScore(Score):
         order_id: str
         items: list = None
 
-    @beat
-    async def fetch_items(ctx: OrderContext):
-        ctx.items = await db.get_items(ctx.order_id)
+    @note
+    async def fetch_items(score: OrderScore):
+        score.items = await db.get_items(score.order_id)
 
     cadence = (
-        Cadence("checkout", OrderContext(order_id="123"))
+        Cadence("checkout", OrderScore(order_id="123"))
         .then("fetch", fetch_items)
         .sync("enrich", [get_prices, get_stock])
         .run()
@@ -30,7 +30,7 @@ from cadence.diagram import (
     to_dot,
     to_mermaid,
 )
-from cadence.exceptions import BeatError, CadenceError, RetryExhaustedError, TimeoutError
+from cadence.exceptions import CadenceError, NoteError, RetryExhaustedError, TimeoutError
 from cadence.flow import Cadence
 from cadence.hooks import (
     CadenceHooks,
@@ -56,28 +56,28 @@ from cadence.state import (
     Atomic,
     AtomicDict,
     AtomicList,
-    Context,
-    ImmutableContext,
+    ImmutableScore,
     MergeConflict,
     MergeStrategy,
+    Score,
     merge_snapshots,
 )
-from cadence.step import Beat, beat
+from cadence.step import Note, note
 
 __version__ = "0.3.0"
 
 __all__ = [
     # Core
     "Cadence",
-    "Context",
-    "ImmutableContext",
-    "beat",
-    "Beat",
+    "Score",
+    "ImmutableScore",
+    "note",
+    "Note",
     # Atomic wrappers
     "Atomic",
     "AtomicList",
     "AtomicDict",
-    # Context merging
+    # Score merging
     "MergeConflict",
     "MergeStrategy",
     "merge_snapshots",
@@ -89,7 +89,7 @@ __all__ = [
     "err",
     # Exceptions
     "CadenceError",
-    "BeatError",
+    "NoteError",
     "TimeoutError",
     "RetryExhaustedError",
     "CircuitOpenError",

@@ -1,4 +1,4 @@
-"""Retry decorator for beat resilience."""
+"""Retry decorator for note resilience."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def retry(
     on: tuple[type[Exception], ...] | None = None,
 ) -> Callable[[F], F]:
     """
-    Decorator to retry a beat on failure.
+    Decorator to retry a note on failure.
 
     Args:
         max_attempts: Maximum number of attempts (default: 3)
@@ -39,12 +39,12 @@ def retry(
 
     Example:
         @retry(max_attempts=3, backoff="exponential")
-        async def fetch_data(ctx):
-            ctx.data = await api.get(ctx.id)
+        async def fetch_data(score):
+            score.data = await api.get(score.id)
 
         @retry(max_attempts=5, on=(ConnectionError, TimeoutError))
-        async def call_service(ctx):
-            ctx.result = await service.call()
+        async def call_service(score):
+            score.result = await service.call()
     """
 
     retry_on = on or (Exception,)
@@ -65,10 +65,10 @@ def retry(
                     last_error = error
 
                     if attempt == max_attempts:
-                        # Get beat name from function or first arg
-                        beat_name = getattr(fn, "__name__", "unknown")
+                        # Get note name from function or first arg
+                        note_name = getattr(fn, "__name__", "unknown")
                         raise RetryExhaustedError(
-                            beat_name, max_attempts, error
+                            note_name, max_attempts, error
                         ) from error
 
                     # Calculate delay
@@ -98,9 +98,9 @@ def retry(
                     last_error = error
 
                     if attempt == max_attempts:
-                        step_name = getattr(fn, "__name__", "unknown")
+                        note_name = getattr(fn, "__name__", "unknown")
                         raise RetryExhaustedError(
-                            beat_name, max_attempts, error
+                            note_name, max_attempts, error
                         ) from error
 
                     current_delay = _calculate_delay(

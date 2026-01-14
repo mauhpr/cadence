@@ -13,7 +13,7 @@ try:
 except ImportError:
     HAS_OTEL = False
 
-ContextT = TypeVar("ContextT")
+ScoreT = TypeVar("ScoreT")
 
 
 def _check_otel() -> None:
@@ -37,11 +37,11 @@ class OpenTelemetryReporter:
 
         otel_reporter = OpenTelemetryReporter(
             service_name="my-service",
-            include_state=True,  # Add state as span attributes
+            include_state=True,  # Add score as span attributes
         )
 
         flow = (
-            Cadence("checkout", ctx)
+            Cadence("checkout", score)
             .with_reporter(otel_reporter)
             .then("validate", validate)
             .then("process", process)
@@ -61,7 +61,7 @@ class OpenTelemetryReporter:
 
         Args:
             service_name: Service name for spans
-            include_state: Include state fields as span attributes
+            include_state: Include score fields as span attributes
             include_timing: Record step duration as metrics
             tracer_name: Custom tracer name (default: service_name)
             meter_name: Custom meter name (default: service_name)
@@ -92,7 +92,7 @@ class OpenTelemetryReporter:
         self,
         step_name: str,
         elapsed: float,
-        state: ContextT,
+        score: ScoreT,
     ) -> None:
         """Record step completion with tracing and metrics."""
         # Parse flow and step from name
@@ -111,9 +111,9 @@ class OpenTelemetryReporter:
                 "cadence.step.duration_ms": elapsed * 1000,
             },
         ) as span:
-            # Add state attributes if enabled
+            # Add score attributes if enabled
             if self.include_state:
-                self._add_state_attributes(span, state)
+                self._add_score_attributes(span, score)
 
             # Record metrics
             if self.include_timing:
@@ -132,19 +132,19 @@ class OpenTelemetryReporter:
                     },
                 )
 
-    def _add_state_attributes(self, span: Span, state: ContextT) -> None:
-        """Add state fields as span attributes."""
-        if hasattr(state, "__dataclass_fields__"):
-            for field_name in state.__dataclass_fields__:
+    def _add_score_attributes(self, span: Span, score: ScoreT) -> None:
+        """Add score fields as span attributes."""
+        if hasattr(score, "__dataclass_fields__"):
+            for field_name in score.__dataclass_fields__:
                 if field_name.startswith("_"):
                     continue
                 try:
-                    value = getattr(state, field_name)
+                    value = getattr(score, field_name)
                     # Only add simple types
                     if isinstance(value, (str, int, float, bool)):
-                        span.set_attribute(f"state.{field_name}", value)
+                        span.set_attribute(f"score.{field_name}", value)
                     elif value is None:
-                        span.set_attribute(f"state.{field_name}", "null")
+                        span.set_attribute(f"score.{field_name}", "null")
                 except Exception:
                     pass
 
@@ -162,7 +162,7 @@ def opentelemetry_reporter(
 
     Args:
         service_name: Service name for spans
-        include_state: Include state fields as span attributes
+        include_state: Include score fields as span attributes
         include_timing: Record step duration as metrics
 
     Returns:
@@ -172,7 +172,7 @@ def opentelemetry_reporter(
         from cadence.reporters.opentelemetry import opentelemetry_reporter
 
         flow = (
-            Cadence("checkout", ctx)
+            Cadence("checkout", score)
             .with_reporter(opentelemetry_reporter("my-service"))
             .then("process", process)
         )

@@ -1,11 +1,12 @@
-"""Thread-safe context management for Cadence.
+"""Thread-safe score management for Cadence.
 
-This module provides context containers that work safely in both async and sync
+This module provides score containers that work safely in both async and sync
 parallel execution contexts using a Copy-on-Write pattern.
 """
 
 from __future__ import annotations
 
+import contextlib
 import copy
 from collections.abc import Callable, Iterator
 from contextvars import ContextVar
@@ -26,9 +27,9 @@ _parallel_mutations: ContextVar[dict[str, Any] | None] = ContextVar(
 )
 
 
-class Context:
+class Score:
     """
-    Base context container for cadence execution.
+    Base score container for cadence execution.
 
     Works with @dataclass to provide easy field definition. In parallel
     execution, uses copy-on-write semantics to avoid race conditions.
@@ -37,12 +38,12 @@ class Context:
         from dataclasses import dataclass
 
         @dataclass
-        class OrderContext(Context):
+        class OrderScore(Score):
             order_id: str
             items: list = None
             total: float = None
 
-        ctx = OrderContext(order_id="123")
+        score = OrderScore(order_id="123")
     """
 
     def __post_init__(self) -> None:
@@ -50,17 +51,15 @@ class Context:
         object.__setattr__(self, "_initialized", True)
         object.__setattr__(self, "_original_values", {})
 
-    def _snapshot(self) -> Context:
+    def _snapshot(self) -> Score:
         """Create a shallow copy for parallel task isolation."""
         # Use copy to preserve the dataclass structure
         snapshot = copy.copy(self)
         # Track original values at snapshot time for conflict detection
         original = {}
         for field in self._get_fields():
-            try:
+            with contextlib.suppress(AttributeError):
                 original[field] = copy.copy(getattr(self, field))
-            except AttributeError:
-                pass
         object.__setattr__(snapshot, "_original_values", original)
         return snapshot
 
@@ -68,7 +67,7 @@ class Context:
         """Get all public field names."""
         if hasattr(self, "__dataclass_fields__"):
             return list(self.__dataclass_fields__.keys())
-        return [k for k in self.__dict__.keys() if not k.startswith("_")]
+        return [k for k in self.__dict__ if not k.startswith("_")]
 
     def _get_changes(self) -> dict[str, Any]:
         """Get fields that changed since snapshot."""
@@ -88,10 +87,10 @@ class Context:
         return changes
 
 
-class MergeConflict(Exception):
+class MergeConflictError(Exception):
     """Raised when parallel tasks modify the same field with different values."""
 
-    def __init__(self, field: str, values: list[Any]):
+    def __init__(self, field: str, values: list[Any]) -> None:
         self.field = field
         self.values = values
         super().__init__(
@@ -99,13 +98,17 @@ class MergeConflict(Exception):
         )
 
 
+# Short alias for convenience
+MergeConflict = MergeConflictError
+
+
 class MergeStrategy:
     """Strategies for merging parallel task results."""
 
     @staticmethod
     def last_write_wins(
-        original: Context,
-        snapshots: list[Context],
+        original: Score,
+        snapshots: list[Score],
         changes: list[dict[str, Any]],
     ) -> None:
         """Last snapshot's value wins for each field."""
@@ -115,8 +118,8 @@ class MergeStrategy:
 
     @staticmethod
     def fail_on_conflict(
-        original: Context,
-        snapshots: list[Context],
+        original: Score,
+        snapshots: list[Score],
         changes: list[dict[str, Any]],
     ) -> None:
         """Raise error if same field modified with different values."""
@@ -135,7 +138,7 @@ class MergeStrategy:
                 if v not in unique_values:
                     unique_values.append(v)
             if len(unique_values) > 1:
-                raise MergeConflict(field, unique_values)
+                raise MergeConflictError(field, unique_values)
 
         # Apply changes
         for field, values in field_values.items():
@@ -143,8 +146,8 @@ class MergeStrategy:
 
     @staticmethod
     def smart_merge(
-        original: Context,
-        snapshots: list[Context],
+        original: Score,
+        snapshots: list[Score],
         changes: list[dict[str, Any]],
     ) -> None:
         """
@@ -202,22 +205,22 @@ class MergeStrategy:
 
             # Different values: conflict
             else:
-                raise MergeConflict(field, values)
+                raise MergeConflictError(field, values)
 
 
 def merge_snapshots(
-    original: Context,
-    snapshots: list[Context],
+    original: Score,
+    snapshots: list[Score],
     strategy: Callable[
-        [Context, list[Context], list[dict[str, Any]]], None
+        [Score, list[Score], list[dict[str, Any]]], None
     ] = MergeStrategy.fail_on_conflict,
 ) -> None:
     """
-    Merge changes from parallel task snapshots back into original context.
+    Merge changes from parallel task snapshots back into original score.
 
     Args:
-        original: The original context to merge into
-        snapshots: List of context snapshots from parallel tasks
+        original: The original score to merge into
+        snapshots: List of score snapshots from parallel tasks
         strategy: Merge strategy function (default: fail_on_conflict)
     """
     changes = [snapshot._get_changes() for snapshot in snapshots]
@@ -237,11 +240,11 @@ class Atomic(Generic[T]):
 
     Example:
         @dataclass
-        class MyContext(Context):
+        class MyScore(Score):
             counter: Atomic[int] = field(default_factory=lambda: Atomic(0))
 
         # In parallel tasks:
-        ctx.counter.update(lambda x: x + 1)  # Thread-safe increment
+        score.counter.update(lambda x: x + 1)  # Thread-safe increment
     """
 
     def __init__(self, value: T) -> None:
@@ -299,11 +302,11 @@ class AtomicList(Generic[T]):
 
     Example:
         @dataclass
-        class MyContext(Context):
+        class MyScore(Score):
             errors: AtomicList[str] = field(default_factory=AtomicList)
 
         # In parallel tasks:
-        ctx.errors.append("Error from task A")  # Thread-safe
+        score.errors.append("Error from task A")  # Thread-safe
     """
 
     def __init__(self, initial: list[T] | None = None) -> None:
@@ -350,11 +353,11 @@ class AtomicDict(Generic[T]):
 
     Example:
         @dataclass
-        class MyContext(Context):
+        class MyScore(Score):
             cache: AtomicDict[str] = field(default_factory=AtomicDict)
 
         # In parallel tasks:
-        ctx.cache.set("key", "value")  # Thread-safe
+        score.cache.set("key", "value")  # Thread-safe
     """
 
     def __init__(self, initial: dict[str, T] | None = None) -> None:
@@ -399,34 +402,34 @@ class AtomicDict(Generic[T]):
 
 
 # =============================================================================
-# Immutable Context (Functional Style)
+# Immutable Score (Functional Style)
 # =============================================================================
 
 
-class ImmutableContext:
+class ImmutableScore:
     """
-    Base class for immutable context using frozen dataclasses.
+    Base class for immutable score using frozen dataclasses.
 
-    Each beat returns a new context instance instead of mutating.
+    Each note returns a new score instance instead of mutating.
     Use with @dataclass(frozen=True).
 
     Example:
         from dataclasses import dataclass
 
         @dataclass(frozen=True)
-        class PureContext(ImmutableContext):
+        class PureScore(ImmutableScore):
             value: int = 0
             items: tuple = ()
 
-        @beat
-        def increment(ctx: PureContext) -> PureContext:
-            return ctx.replace(value=ctx.value + 1)
+        @note
+        def increment(score: PureScore) -> PureScore:
+            return score.replace(value=score.value + 1)
     """
 
-    def replace(self, **changes: Any) -> ImmutableContext:
+    def replace(self, **changes: Any) -> ImmutableScore:
         """Create a new instance with specified fields replaced."""
         return replace(self, **changes)
 
-    def with_field(self, field: str, value: Any) -> ImmutableContext:
+    def with_field(self, field: str, value: Any) -> ImmutableScore:
         """Create a new instance with one field replaced."""
         return replace(self, **{field: value})

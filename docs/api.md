@@ -6,10 +6,10 @@ Complete API documentation for the Cadence framework.
 
 - [Core Classes](#core-classes)
   - [Cadence](#cadence)
-  - [Context](#context)
-  - [ImmutableContext](#immutablecontext)
+  - [Score](#score)
+  - [ImmutableScore](#immutablescore)
 - [Decorators](#decorators)
-  - [@beat](#beat)
+  - [@note](#note)
   - [@retry](#retry)
   - [@timeout](#timeout)
   - [@fallback](#fallback)
@@ -43,13 +43,13 @@ from cadence import Cadence
 #### Constructor
 
 ```python
-Cadence(name: str, context: ContextT)
+Cadence(name: str, score: ScoreT)
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `name` | `str` | Human-readable name for the cadence |
-| `context` | `ContextT` | Initial context object |
+| `score` | `ScoreT` | Initial score object |
 
 #### Methods
 
@@ -63,11 +63,11 @@ cadence.then("fetch_data", fetch_data_task)
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `name` | `str` | Beat name for logging/tracing |
-| `task` | `Callable` | Function that receives context |
+| `name` | `str` | Note name for logging/tracing |
+| `task` | `Callable` | Function that receives score |
 | `can_interrupt` | `bool` | If `True` and task returns `True`, cadence stops |
 
-**Returns:** `Cadence[ContextT]` (self for chaining)
+**Returns:** `Cadence[ScoreT]` (self for chaining)
 
 ##### `.sync(name, tasks, *, merge_strategy=MergeStrategy.fail_on_conflict)`
 
@@ -79,16 +79,16 @@ cadence.sync("enrich", [fetch_user, fetch_prefs, fetch_history])
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `name` | `str` | Beat name for the parallel group |
+| `name` | `str` | Note name for the parallel group |
 | `tasks` | `list[Callable]` | Functions to execute concurrently |
-| `merge_strategy` | `Callable` | Strategy for merging parallel context changes |
+| `merge_strategy` | `Callable` | Strategy for merging parallel score changes |
 
 **Merge Strategies:**
 - `MergeStrategy.fail_on_conflict` - Raise error if same field modified (default)
 - `MergeStrategy.last_write_wins` - Last completed task wins
 - `MergeStrategy.smart_merge` - Intelligently merge lists and dicts
 
-**Returns:** `Cadence[ContextT]`
+**Returns:** `Cadence[ScoreT]`
 
 ##### `.split(name, condition, if_true, if_false=None, *, parallel=False)`
 
@@ -104,13 +104,13 @@ cadence.split("route",
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `name` | `str` | Beat name for the branch |
-| `condition` | `Callable[[ContextT], bool]` | Function returning bool |
+| `name` | `str` | Note name for the branch |
+| `condition` | `Callable[[ScoreT], bool]` | Function returning bool |
 | `if_true` | `list[Callable]` | Tasks to run if condition is True |
 | `if_false` | `list[Callable]` | Tasks to run if condition is False |
 | `parallel` | `bool` | Execute branch tasks in parallel |
 
-**Returns:** `Cadence[ContextT]`
+**Returns:** `Cadence[ScoreT]`
 
 ##### `.child(name, cadence, merge)`
 
@@ -122,11 +122,11 @@ cadence.child("payment", payment_cadence, merge_payment_result)
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `name` | `str` | Beat name for the child cadence |
-| `cadence` | `Cadence[ChildContextT]` | Child cadence to execute |
-| `merge` | `Callable[[ContextT, ChildContextT], None]` | Function to merge child context into parent |
+| `name` | `str` | Note name for the child cadence |
+| `cadence` | `Cadence[ChildScoreT]` | Child cadence to execute |
+| `merge` | `Callable[[ScoreT, ChildScoreT], None]` | Function to merge child score into parent |
 
-**Returns:** `Cadence[ContextT]`
+**Returns:** `Cadence[ScoreT]`
 
 ##### `.with_reporter(reporter)`
 
@@ -136,16 +136,16 @@ Add a time reporter for observability.
 cadence.with_reporter(my_reporter)
 ```
 
-The reporter is called after each beat with:
-- `beat_name: str` - Name of the beat
+The reporter is called after each note with:
+- `note_name: str` - Name of the note
 - `elapsed: float` - Time in seconds
-- `context: ContextT` - Current context
+- `score: ScoreT` - Current score
 
-**Returns:** `Cadence[ContextT]`
+**Returns:** `Cadence[ScoreT]`
 
 ##### `.with_hooks(hooks)`
 
-Add hooks for intercepting cadence and beat execution.
+Add hooks for intercepting cadence and note execution.
 
 ```python
 cadence.with_hooks(LoggingHooks()).with_hooks(TimingHooks())
@@ -153,7 +153,7 @@ cadence.with_hooks(LoggingHooks()).with_hooks(TimingHooks())
 
 Multiple hooks can be added - they are called in order.
 
-**Returns:** `Cadence[ContextT]`
+**Returns:** `Cadence[ScoreT]`
 
 ##### `.on_error(handler, *, stop=True)`
 
@@ -165,10 +165,10 @@ cadence.on_error(handle_error, stop=False)
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `handler` | `Callable[[ContextT, Exception], Any]` | Error handler function |
+| `handler` | `Callable[[ScoreT, Exception], Any]` | Error handler function |
 | `stop` | `bool` | If `True`, stop cadence on error |
 
-**Returns:** `Cadence[ContextT]`
+**Returns:** `Cadence[ScoreT]`
 
 ##### `async .run()`
 
@@ -178,9 +178,9 @@ Execute the cadence asynchronously.
 result = await cadence.run()
 ```
 
-**Returns:** `ContextT` - The final context after all beats complete
+**Returns:** `ScoreT` - The final score after all notes complete
 
-**Raises:** `CadenceError` if a beat fails and no error handler is set
+**Raises:** `CadenceError` if a note fails and no error handler is set
 
 ##### `.run_sync()`
 
@@ -190,48 +190,48 @@ Execute the cadence synchronously (convenience method).
 result = cadence.run_sync()
 ```
 
-**Returns:** `ContextT`
+**Returns:** `ScoreT`
 
-##### `.get_context()`
+##### `.get_score()`
 
-Get the current context.
+Get the current score.
 
 ```python
-ctx = cadence.get_context()
+score = cadence.get_score()
 ```
 
-**Returns:** `ContextT`
+**Returns:** `ScoreT`
 
 ---
 
-### Context
+### Score
 
-Base class for mutable context objects.
+Base class for mutable score objects.
 
 ```python
-from cadence import Context
+from cadence import Score
 from dataclasses import dataclass
 
 @dataclass
-class MyContext(Context):
+class MyScore(Score):
     user_id: str
     data: dict = None
 ```
 
-Context provides copy-on-write semantics for parallel execution, ensuring each parallel task gets an isolated copy that is merged back after completion.
+Score provides copy-on-write semantics for parallel execution, ensuring each parallel task gets an isolated copy that is merged back after completion.
 
 ---
 
-### ImmutableContext
+### ImmutableScore
 
-Base class for immutable (frozen) context objects.
+Base class for immutable (frozen) score objects.
 
 ```python
-from cadence import ImmutableContext
+from cadence import ImmutableScore
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
-class Config(ImmutableContext):
+class Config(ImmutableScore):
     api_key: str
     timeout: int = 30
 ```
@@ -240,7 +240,7 @@ class Config(ImmutableContext):
 
 ##### `.replace(**changes)`
 
-Create a new context with specified fields replaced.
+Create a new score with specified fields replaced.
 
 ```python
 new_config = config.replace(timeout=60)
@@ -248,7 +248,7 @@ new_config = config.replace(timeout=60)
 
 ##### `.with_field(field, value)`
 
-Create a new context with a single field changed.
+Create a new score with a single field changed.
 
 ```python
 new_config = config.with_field("timeout", 60)
@@ -258,16 +258,16 @@ new_config = config.with_field("timeout", 60)
 
 ## Decorators
 
-### @beat
+### @note
 
-Mark a function as a beat (task) in a cadence.
+Mark a function as a note (task) in a cadence.
 
 ```python
-from cadence import beat
+from cadence import note
 
-@beat
-async def process_order(ctx: OrderContext) -> None:
-    ctx.status = "processed"
+@note
+async def process_order(score: OrderScore) -> None:
+    score.status = "processed"
 ```
 
 The decorator validates the function signature and provides metadata for observability.
@@ -282,9 +282,9 @@ Add automatic retry with exponential backoff.
 from cadence import retry
 
 @retry(max_attempts=3, delay=1.0, backoff=2.0, exceptions=(ConnectionError,))
-@beat
-async def call_api(ctx):
-    ctx.data = await api.fetch()
+@note
+async def call_api(score):
+    score.data = await api.fetch()
 ```
 
 | Parameter | Type | Default | Description |
@@ -304,9 +304,9 @@ Add execution timeout.
 from cadence import timeout
 
 @timeout(seconds=5.0)
-@beat
-async def slow_operation(ctx):
-    ctx.result = await long_task()
+@note
+async def slow_operation(score):
+    score.result = await long_task()
 ```
 
 | Parameter | Type | Description |
@@ -325,9 +325,9 @@ Provide a fallback value on failure.
 from cadence import fallback
 
 @fallback(default={"status": "unknown"})
-@beat
-async def get_status(ctx):
-    ctx.status = await status_service.get()
+@note
+async def get_status(score):
+    score.status = await status_service.get()
 ```
 
 | Parameter | Type | Description |
@@ -350,9 +350,9 @@ from cadence import circuit_breaker
     recovery_timeout=30.0,
     half_open_max_calls=3
 )
-@beat
-async def call_service(ctx):
-    ctx.data = await fragile_service.fetch()
+@note
+async def call_service(score):
+    score.data = await fragile_service.fetch()
 ```
 
 | Parameter | Type | Default | Description |
@@ -380,38 +380,38 @@ Base class for creating custom hooks.
 from cadence import CadenceHooks
 
 class MyHooks(CadenceHooks):
-    async def before_cadence(self, cadence_name: str, context: ContextT) -> None:
+    async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
         """Called before cadence execution starts."""
         pass
 
     async def after_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None
     ) -> None:
         """Called after cadence execution completes."""
         pass
 
-    async def before_beat(self, beat_name: str, context: ContextT) -> None:
-        """Called before each beat executes."""
+    async def before_note(self, note_name: str, score: ScoreT) -> None:
+        """Called before each note executes."""
         pass
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None
     ) -> None:
-        """Called after each beat completes."""
+        """Called after each note completes."""
         pass
 
     async def on_error(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         error: Exception
     ) -> None:
         """Called when an error occurs."""
@@ -422,7 +422,7 @@ class MyHooks(CadenceHooks):
 
 #### LoggingHooks
 
-Logs cadence and beat execution.
+Logs cadence and note execution.
 
 ```python
 from cadence import LoggingHooks
@@ -490,9 +490,9 @@ cadence.with_reporter(reporter)
 ```
 
 **Metrics exported:**
-- `{prefix}_step_duration_seconds` - Histogram of beat durations
-- `{prefix}_step_total` - Counter of beat executions
-- `{prefix}_step_errors_total` - Counter of beat errors
+- `{prefix}_step_duration_seconds` - Histogram of note durations
+- `{prefix}_step_total` - Counter of note executions
+- `{prefix}_step_errors_total` - Counter of note errors
 - `{prefix}_flow_duration_seconds` - Histogram of cadence durations
 - `{prefix}_flow_total` - Counter of cadence executions
 - `{prefix}_active_flows` - Gauge of active cadences
@@ -524,23 +524,23 @@ Base exception for all cadence errors.
 from cadence import CadenceError
 ```
 
-### BeatError
+### NoteError
 
-Exception raised when a beat fails.
+Exception raised when a note fails.
 
 ```python
-from cadence import BeatError
+from cadence import NoteError
 
 try:
     await cadence.run()
-except BeatError as e:
-    print(f"Beat {e.beat_name} failed: {e}")
+except NoteError as e:
+    print(f"Note {e.note_name} failed: {e}")
     print(f"Original error: {e.original_error}")
 ```
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `beat_name` | `str` | Name of the failed beat |
+| `note_name` | `str` | Name of the failed note |
 | `original_error` | `Exception` | The underlying exception |
 
 ---
@@ -586,7 +586,7 @@ router = CadenceRouter()
 
 @router.cadence("/process/{id}")
 async def process(id: str):
-    return MyContext(id=id)
+    return MyScore(id=id)
 
 app.include_router(router)
 ```
@@ -602,7 +602,7 @@ bp = CadenceBlueprint("api", __name__)
 
 @bp.cadence_route("/process/<id>")
 def process(id):
-    return MyContext(id=id)
+    return MyScore(id=id)
 
 app.register_blueprint(bp)
 ```
@@ -637,8 +637,8 @@ cadence init <project-name>
 # Generate a new cadence
 cadence new cadence <name>
 
-# Generate a new beat
-cadence new beat <name> [--retry N] [--timeout N] [--fallback]
+# Generate a new note
+cadence new note <name> [--retry N] [--timeout N] [--fallback]
 
 # Generate diagram
 cadence diagram <module:cadence> [--format mermaid|dot|svg|png]

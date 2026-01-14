@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Generic, TypeVar, Union
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 E = TypeVar("E", bound=Exception)
@@ -55,7 +55,7 @@ class Err(Generic[E]):
         return self
 
 
-Result = Union[Ok[T], Err[E]]
+Result = Ok[T] | Err[E]
 
 
 def ok(value: T) -> Ok[T]:

@@ -8,7 +8,7 @@ This document describes the architectural decisions and design philosophy behind
 - [Design Philosophy](#design-philosophy)
 - [Core Concepts](#core-concepts)
 - [Architecture](#architecture)
-- [Context Management](#context-management)
+- [Score Management](#score-management)
 - [Parallel Execution Model](#parallel-execution-model)
 - [Resilience Patterns](#resilience-patterns)
 - [Extensibility](#extensibility)
@@ -22,7 +22,7 @@ Cadence is a declarative Python framework for orchestrating service logic. It pr
 ### Goals
 
 1. **Clarity** - Make service orchestration logic explicit and readable
-2. **Safety** - Provide safe parallel execution with context isolation
+2. **Safety** - Provide safe parallel execution with score isolation
 3. **Resilience** - Built-in patterns for handling failures gracefully
 4. **Observability** - First-class support for logging, metrics, and tracing
 5. **Simplicity** - Zero required dependencies, easy to integrate
@@ -44,7 +44,7 @@ Cadence favors explicit declaration of workflow structure over implicit behavior
 ```python
 # Explicit: You can see the entire flow structure
 cadence = (
-    Cadence("checkout", ctx)
+    Cadence("checkout", score)
     .then("validate", validate_order)
     .sync("enrich", [fetch_user, fetch_inventory])
     .split("route", is_premium, [priority], [standard])
@@ -59,7 +59,7 @@ Build complex workflows by composing simple pieces:
 ```python
 # Compose child cadences
 main_cadence = (
-    Cadence("main", ctx)
+    Cadence("main", score)
     .child("auth", auth_cadence, merge_auth)
     .child("process", process_cadence, merge_result)
 )
@@ -72,7 +72,7 @@ Cadence encourages explicit error handling rather than silent failures:
 ```python
 # Explicit error handling
 cadence = (
-    Cadence("risky", ctx)
+    Cadence("risky", score)
     .then("attempt", risky_operation)
     .on_error(handle_failure, stop=False)
     .then("cleanup", cleanup)
@@ -85,29 +85,29 @@ cadence = (
 
 ### Cadence
 
-A Cadence represents a sequence of operations (beats) that transform a context. It's the main unit of orchestration.
+A Cadence represents a sequence of operations (notes) that transform a score. It's the main unit of orchestration.
 
 ```
-Cadence = Name + Context + [Beat1, Beat2, ..., BeatN]
+Cadence = Name + Score + [Note1, Note2, ..., NoteN]
 ```
 
-### Beat
+### Note
 
-A Beat is a single unit of work in a cadence. Beats are functions that receive and modify context.
+A Note is a single unit of work in a cadence. Notes are functions that receive and modify score.
 
 ```python
-@beat
-async def process_payment(ctx: OrderContext) -> None:
-    ctx.payment_status = await charge(ctx.total)
+@note
+async def process_payment(score: OrderScore) -> None:
+    score.payment_status = await charge(score.total)
 ```
 
-### Context
+### Score
 
-Context is the shared state that flows through a cadence. It's a mutable dataclass that beats read and modify.
+Score is the shared state that flows through a cadence. It's a mutable dataclass that notes read and modify.
 
 ```python
 @dataclass
-class OrderContext(Context):
+class OrderScore(Score):
     order_id: str
     items: list = None
     total: float = 0.0
@@ -123,15 +123,15 @@ class OrderContext(Context):
 ┌─────────────────────────────────────────────────────────┐
 │                        Cadence                          │
 │  ┌─────────────────────────────────────────────────┐   │
-│  │                   Nodes                          │   │
+│  │                   Measures                       │   │
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐│   │
-│  │  │SingleNode│ │ParallelNo│ │BranchNode        ││   │
-│  │  │          │ │de        │ │                  ││   │
+│  │  │ Single   │ │ Parallel │ │ Branch           ││   │
+│  │  │ Measure  │ │ Measure  │ │ Measure          ││   │
 │  │  │ • then() │ │ • sync() │ │ • split()        ││   │
 │  │  └──────────┘ └──────────┘ └──────────────────┘│   │
 │  │  ┌──────────┐ ┌──────────┐                     │   │
-│  │  │SequenceN │ │ChildCade │                     │   │
-│  │  │ode       │ │nceNode   │                     │   │
+│  │  │ Sequence │ │ChildCade │                     │   │
+│  │  │ Measure  │ │nceMeasure│                     │   │
 │  │  │          │ │          │                     │   │
 │  │  │•sequence │ │ • child()│                     │   │
 │  │  └──────────┘ └──────────┘                     │   │
@@ -143,9 +143,9 @@ class OrderContext(Context):
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐  ┌─────────────────┐
-│    Context      │  │   Resilience    │
+│      Score      │  │   Resilience    │
 │  ┌───────────┐  │  │  ┌───────────┐  │
-│  │ Context   │  │  │  │ @retry    │  │
+│  │ Score     │  │  │  │ @retry    │  │
 │  │ Immutable │  │  │  │ @timeout  │  │
 │  │ Atomic*   │  │  │  │ @fallback │  │
 │  └───────────┘  │  │  │ @circuit  │  │
@@ -160,17 +160,17 @@ class OrderContext(Context):
    │
 2. ├─► before_cadence hooks
    │
-3. ├─► For each node:
+3. ├─► For each measure:
    │    │
-   │    ├─► before_beat hooks
+   │    ├─► before_note hooks
    │    │
-   │    ├─► Execute node
-   │    │   • SingleNode: Run task
-   │    │   • ParallelNode: Fork, run, merge
-   │    │   • BranchNode: Evaluate, choose path
-   │    │   • ChildCadenceNode: Run child, merge
+   │    ├─► Execute measure
+   │    │   • SingleMeasure: Run task
+   │    │   • ParallelMeasure: Fork, run, merge
+   │    │   • BranchMeasure: Evaluate, choose path
+   │    │   • ChildCadenceMeasure: Run child, merge
    │    │
-   │    ├─► after_beat hooks
+   │    ├─► after_note hooks
    │    │
    │    └─► Check for interrupt signal
    │
@@ -181,32 +181,32 @@ class OrderContext(Context):
 
 ---
 
-## Context Management
+## Score Management
 
-### Mutable Context
+### Mutable Score
 
-The default `Context` class is mutable and designed for straightforward use:
+The default `Score` class is mutable and designed for straightforward use:
 
 ```python
 @dataclass
-class MyContext(Context):
+class MyScore(Score):
     value: int = 0
 
-ctx = MyContext()
-ctx.value = 42  # Direct mutation
+score = MyScore()
+score.value = 42  # Direct mutation
 ```
 
 ### Copy-on-Write for Parallel Execution
 
-When running beats in parallel via `.sync()`, Cadence uses copy-on-write semantics:
+When running notes in parallel via `.sync()`, Cadence uses copy-on-write semantics:
 
-1. **Snapshot**: Before parallel execution, create a snapshot of the context
+1. **Snapshot**: Before parallel execution, create a snapshot of the score
 2. **Isolate**: Each parallel task gets its own copy
 3. **Track**: Track which fields each task modifies
 4. **Merge**: After completion, merge changes back to the original
 
 ```
-Original Context
+Original Score
      │
      ▼
 ┌─────────┐
@@ -228,7 +228,7 @@ Original Context
           Merge Strategy
                 │
                 ▼
-         Final Context
+          Final Score
 ```
 
 ### Merge Strategies
@@ -241,11 +241,11 @@ Original Context
 
 ### Atomic Types
 
-For truly concurrent access (not just parallel beats), use atomic types:
+For truly concurrent access (not just parallel notes), use atomic types:
 
 ```python
 @dataclass
-class AggregatorContext(Context):
+class AggregatorScore(Score):
     results: AtomicList = field(default_factory=AtomicList)
     cache: AtomicDict = field(default_factory=AtomicDict)
 ```
@@ -262,9 +262,9 @@ For async tasks, Cadence uses `asyncio.gather()`:
 
 ```python
 results = await asyncio.gather(
-    task_a(context_copy_a),
-    task_b(context_copy_b),
-    task_c(context_copy_c),
+    task_a(score_copy_a),
+    task_b(score_copy_b),
+    task_c(score_copy_c),
 )
 ```
 
@@ -275,8 +275,8 @@ For sync tasks in a `.sync()` block, Cadence uses `ThreadPoolExecutor`:
 ```python
 with ThreadPoolExecutor() as executor:
     futures = [
-        executor.submit(task, context_copy)
-        for task, context_copy in zip(tasks, copies)
+        executor.submit(task, score_copy)
+        for task, score_copy in zip(tasks, copies)
     ]
     results = [f.result() for f in futures]
 ```
@@ -287,8 +287,8 @@ When mixing async and sync tasks, sync tasks are wrapped in `asyncio.to_thread()
 
 ```python
 await asyncio.gather(
-    async_task(ctx_a),
-    asyncio.to_thread(sync_task, ctx_b),
+    async_task(score_a),
+    asyncio.to_thread(sync_task, score_b),
 )
 ```
 
@@ -351,8 +351,8 @@ Implement `CadenceHooks` to intercept execution:
 
 ```python
 class MyHooks(CadenceHooks):
-    async def before_beat(self, name, ctx):
-        # Custom logic before each beat
+    async def before_note(self, name, score):
+        # Custom logic before each note
         pass
 ```
 
@@ -361,7 +361,7 @@ class MyHooks(CadenceHooks):
 Any callable matching the reporter signature:
 
 ```python
-def my_reporter(beat_name: str, elapsed: float, context: Any) -> None:
+def my_reporter(note_name: str, elapsed: float, score: Any) -> None:
     # Custom reporting logic
     pass
 ```
@@ -371,7 +371,7 @@ def my_reporter(beat_name: str, elapsed: float, context: Any) -> None:
 Any callable matching the merge signature:
 
 ```python
-def my_merge(original: Context, changes: list[dict]) -> None:
+def my_merge(original: Score, changes: list[dict]) -> None:
     # Custom merge logic
     pass
 ```

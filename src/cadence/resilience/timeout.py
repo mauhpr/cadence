@@ -1,4 +1,4 @@
-"""Timeout decorator for beat resilience."""
+"""Timeout decorator for note resilience."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def timeout(
     message: str | None = None,
 ) -> Callable[[F], F]:
     """
-    Decorator to add timeout to a beat.
+    Decorator to add timeout to a note.
 
     Args:
         seconds: Maximum execution time in seconds
@@ -28,16 +28,16 @@ def timeout(
 
     Example:
         @timeout(5.0)
-        async def fetch_data(ctx):
-            ctx.data = await slow_api.get(ctx.id)
+        async def fetch_data(score):
+            score.data = await slow_api.get(score.id)
 
         @timeout(10.0, message="Payment gateway timeout")
-        async def process_payment(ctx):
-            ctx.result = await payment.charge(ctx.amount)
+        async def process_payment(score):
+            score.result = await payment.charge(score.amount)
     """
 
     def decorator(fn: F) -> F:
-        beat_name = getattr(fn, "__name__", "unknown")
+        note_name = getattr(fn, "__name__", "unknown")
 
         @functools.wraps(fn)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -46,8 +46,8 @@ def timeout(
                 if inspect.iscoroutine(result):
                     return await asyncio.wait_for(result, timeout=seconds)
                 return result
-            except asyncio.TimeoutError:
-                raise CadenceTimeoutError(beat_name, seconds)
+            except asyncio.TimeoutError as exc:
+                raise CadenceTimeoutError(note_name, seconds) from exc
 
         @functools.wraps(fn)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -61,7 +61,7 @@ def timeout(
                 return fn(*args, **kwargs)
 
             def timeout_handler(signum: int, frame: Any) -> None:
-                raise CadenceTimeoutError(beat_name, seconds)
+                raise CadenceTimeoutError(note_name, seconds)
 
             # Set the signal handler
             old_handler = signal.signal(signal.SIGALRM, timeout_handler)

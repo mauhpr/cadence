@@ -43,28 +43,28 @@ class CadenceError(Exception):
         return f"CadenceError(code={self._code!r}, message={self._message!r})"
 
 
-class BeatError(CadenceError):
-    """Error that occurred during beat execution."""
+class NoteError(CadenceError):
+    """Error that occurred during note execution."""
 
     def __init__(
         self,
         message: str,
         *,
-        beat_name: str,
+        note_name: str,
         original_error: Exception | None = None,
         code: str | None = None,
     ) -> None:
         super().__init__(
             message,
-            code=code or "BEAT_ERROR",
-            details={"beat_name": beat_name},
+            code=code or "NOTE_ERROR",
+            details={"note_name": note_name},
         )
-        self._beat_name = beat_name
+        self._note_name = note_name
         self._original_error = original_error
 
     @property
-    def beat_name(self) -> str:
-        return self._beat_name
+    def note_name(self) -> str:
+        return self._note_name
 
     @property
     def original_error(self) -> Exception | None:
@@ -72,13 +72,13 @@ class BeatError(CadenceError):
 
 
 class TimeoutError(CadenceError):
-    """Beat execution timed out."""
+    """Note execution timed out."""
 
-    def __init__(self, beat_name: str, timeout_seconds: float) -> None:
+    def __init__(self, note_name: str, timeout_seconds: float) -> None:
         super().__init__(
-            f"Beat '{beat_name}' timed out after {timeout_seconds}s",
+            f"Note '{note_name}' timed out after {timeout_seconds}s",
             code="TIMEOUT",
-            details={"beat_name": beat_name, "timeout": timeout_seconds},
+            details={"note_name": note_name, "timeout": timeout_seconds},
         )
 
 
@@ -87,14 +87,14 @@ class RetryExhaustedError(CadenceError):
 
     def __init__(
         self,
-        beat_name: str,
+        note_name: str,
         attempts: int,
         last_error: Exception,
     ) -> None:
         super().__init__(
-            f"Beat '{beat_name}' failed after {attempts} attempts: {last_error}",
+            f"Note '{note_name}' failed after {attempts} attempts: {last_error}",
             code="RETRY_EXHAUSTED",
-            details={"beat_name": beat_name, "attempts": attempts},
+            details={"note_name": note_name, "attempts": attempts},
         )
         self._last_error = last_error
 
