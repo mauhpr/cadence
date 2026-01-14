@@ -15,8 +15,9 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 class CircuitState(Enum):
     """Circuit breaker states."""
-    CLOSED = "closed"      # Normal operation, requests flow through
-    OPEN = "open"          # Failing, requests are blocked
+
+    CLOSED = "closed"  # Normal operation, requests flow through
+    OPEN = "open"  # Failing, requests are blocked
     HALF_OPEN = "half_open"  # Testing if service recovered
 
 
@@ -26,9 +27,7 @@ class CircuitOpenError(Exception):
     def __init__(self, name: str, retry_after: float) -> None:
         self.name = name
         self.retry_after = retry_after
-        super().__init__(
-            f"Circuit '{name}' is open. Retry after {retry_after:.1f}s"
-        )
+        super().__init__(f"Circuit '{name}' is open. Retry after {retry_after:.1f}s")
 
 
 class CircuitBreaker:
@@ -81,10 +80,7 @@ class CircuitBreaker:
     def state(self) -> CircuitState:
         """Get current state, checking for automatic transitions."""
         with self._lock:
-            if (
-                self._state == CircuitState.OPEN
-                and self._last_failure_time is not None
-            ):
+            if self._state == CircuitState.OPEN and self._last_failure_time is not None:
                 # Check if recovery timeout has passed
                 elapsed = time.monotonic() - self._last_failure_time
                 if elapsed >= self.recovery_timeout:
@@ -225,6 +221,7 @@ def circuit_breaker(
         )
 
         if inspect.iscoroutinefunction(func):
+
             @functools.wraps(func)
             async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
                 if not circuit._can_execute():
@@ -243,6 +240,7 @@ def circuit_breaker(
 
             return async_wrapper  # type: ignore
         else:
+
             @functools.wraps(func)
             def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
                 if not circuit._can_execute():

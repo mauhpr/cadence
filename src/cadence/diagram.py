@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
 class MeasureShape(Enum):
     """Shape styles for different measure types."""
+
     SINGLE = "rectangle"
     PARALLEL = "parallelogram"
     SEQUENCE = "rectangle"
@@ -47,12 +48,13 @@ class MeasureShape(Enum):
 @dataclass
 class DiagramNode:
     """Represents a measure in the diagram."""
+
     id: str
     label: str
     measure_type: str
     shape: MeasureShape
-    children: list[DiagramNode] = None
-    branches: dict[str, list[DiagramNode]] = None
+    children: list[DiagramNode] | None = None
+    branches: dict[str, list[DiagramNode]] | None = None
 
     def __post_init__(self) -> None:
         if self.children is None:
@@ -61,7 +63,7 @@ class DiagramNode:
             self.branches = {}
 
 
-def _extract_measures(cadence: Cadence) -> list[DiagramNode]:
+def _extract_measures(cadence: Cadence[Any]) -> list[DiagramNode]:
     """Extract diagram nodes from a cadence."""
     from cadence.nodes.branch import BranchMeasure
     from cadence.nodes.child import ChildCadenceMeasure
@@ -75,12 +77,14 @@ def _extract_measures(cadence: Cadence) -> list[DiagramNode]:
         measure_id = f"measure_{i}"
 
         if isinstance(measure, SingleMeasure):
-            diagram_nodes.append(DiagramNode(
-                id=measure_id,
-                label=measure.name,
-                measure_type="single",
-                shape=MeasureShape.SINGLE,
-            ))
+            diagram_nodes.append(
+                DiagramNode(
+                    id=measure_id,
+                    label=measure.name,
+                    measure_type="single",
+                    shape=MeasureShape.SINGLE,
+                )
+            )
 
         elif isinstance(measure, ParallelMeasure):
             children = []
@@ -89,19 +93,23 @@ def _extract_measures(cadence: Cadence) -> list[DiagramNode]:
                 # Strip timing wrapper name if present
                 if "[" in task_name:
                     task_name = task_name.split("[")[0] + f"[{j}]"
-                children.append(DiagramNode(
-                    id=f"{measure_id}_task_{j}",
-                    label=task_name,
-                    measure_type="task",
-                    shape=MeasureShape.SINGLE,
-                ))
-            diagram_nodes.append(DiagramNode(
-                id=measure_id,
-                label=measure.name,
-                measure_type="parallel",
-                shape=MeasureShape.PARALLEL,
-                children=children,
-            ))
+                children.append(
+                    DiagramNode(
+                        id=f"{measure_id}_task_{j}",
+                        label=task_name,
+                        measure_type="task",
+                        shape=MeasureShape.SINGLE,
+                    )
+                )
+            diagram_nodes.append(
+                DiagramNode(
+                    id=measure_id,
+                    label=measure.name,
+                    measure_type="parallel",
+                    shape=MeasureShape.PARALLEL,
+                    children=children,
+                )
+            )
 
         elif isinstance(measure, SequenceMeasure):
             children = []
@@ -109,19 +117,23 @@ def _extract_measures(cadence: Cadence) -> list[DiagramNode]:
                 task_name = getattr(task, "__name__", f"task_{j}")
                 if "[" in task_name:
                     task_name = task_name.split("[")[0] + f"[{j}]"
-                children.append(DiagramNode(
-                    id=f"{measure_id}_task_{j}",
-                    label=task_name,
-                    measure_type="task",
-                    shape=MeasureShape.SINGLE,
-                ))
-            diagram_nodes.append(DiagramNode(
-                id=measure_id,
-                label=measure.name,
-                measure_type="sequence",
-                shape=MeasureShape.SEQUENCE,
-                children=children,
-            ))
+                children.append(
+                    DiagramNode(
+                        id=f"{measure_id}_task_{j}",
+                        label=task_name,
+                        measure_type="task",
+                        shape=MeasureShape.SINGLE,
+                    )
+                )
+            diagram_nodes.append(
+                DiagramNode(
+                    id=measure_id,
+                    label=measure.name,
+                    measure_type="sequence",
+                    shape=MeasureShape.SEQUENCE,
+                    children=children,
+                )
+            )
 
         elif isinstance(measure, BranchMeasure):
             condition_name = getattr(measure._condition, "__name__", "condition")
@@ -129,46 +141,54 @@ def _extract_measures(cadence: Cadence) -> list[DiagramNode]:
             if_true_nodes = []
             for j, task in enumerate(measure._if_tasks):
                 task_name = getattr(task, "__name__", f"if_true_{j}")
-                if_true_nodes.append(DiagramNode(
-                    id=f"{measure_id}_true_{j}",
-                    label=task_name,
-                    measure_type="task",
-                    shape=MeasureShape.SINGLE,
-                ))
+                if_true_nodes.append(
+                    DiagramNode(
+                        id=f"{measure_id}_true_{j}",
+                        label=task_name,
+                        measure_type="task",
+                        shape=MeasureShape.SINGLE,
+                    )
+                )
 
             if_false_nodes = []
             for j, task in enumerate(measure._else_tasks):
                 task_name = getattr(task, "__name__", f"if_false_{j}")
-                if_false_nodes.append(DiagramNode(
-                    id=f"{measure_id}_false_{j}",
-                    label=task_name,
-                    measure_type="task",
-                    shape=MeasureShape.SINGLE,
-                ))
+                if_false_nodes.append(
+                    DiagramNode(
+                        id=f"{measure_id}_false_{j}",
+                        label=task_name,
+                        measure_type="task",
+                        shape=MeasureShape.SINGLE,
+                    )
+                )
 
-            diagram_nodes.append(DiagramNode(
-                id=measure_id,
-                label=f"{measure.name}\\n({condition_name})",
-                measure_type="branch",
-                shape=MeasureShape.BRANCH,
-                branches={"true": if_true_nodes, "false": if_false_nodes},
-            ))
+            diagram_nodes.append(
+                DiagramNode(
+                    id=measure_id,
+                    label=f"{measure.name}\\n({condition_name})",
+                    measure_type="branch",
+                    shape=MeasureShape.BRANCH,
+                    branches={"true": if_true_nodes, "false": if_false_nodes},
+                )
+            )
 
         elif isinstance(measure, ChildCadenceMeasure):
             child_nodes = _extract_measures(measure._child_cadence)
-            diagram_nodes.append(DiagramNode(
-                id=measure_id,
-                label=f"{measure.name}\\n[{measure._child_cadence._name}]",
-                measure_type="child",
-                shape=MeasureShape.CHILD,
-                children=child_nodes,
-            ))
+            diagram_nodes.append(
+                DiagramNode(
+                    id=measure_id,
+                    label=f"{measure.name}\\n[{measure._child_cadence._name}]",
+                    measure_type="child",
+                    shape=MeasureShape.CHILD,
+                    children=child_nodes,
+                )
+            )
 
     return diagram_nodes
 
 
 def to_mermaid(
-    cadence: Cadence,
+    cadence: Cadence[Any],
     *,
     direction: str = "TD",
     theme: str | None = None,
@@ -213,7 +233,7 @@ def to_mermaid(
             lines.append(f"    {prev_id} --> {fork_id}")
 
             # Add parallel tasks
-            for child in node.children:
+            for child in node.children or []:
                 lines.append(f"    {child.id}[{child.label}]")
                 lines.append(f"    {fork_id} --> {child.id}")
                 lines.append(f"    {child.id} --> {join_id}")
@@ -224,7 +244,7 @@ def to_mermaid(
         elif node.measure_type == "sequence":
             # Add sequence tasks in order
             seq_prev = prev_id
-            for child in node.children:
+            for child in node.children or []:
                 lines.append(f"    {child.id}[{child.label}]")
                 lines.append(f"    {seq_prev} --> {child.id}")
                 seq_prev = child.id
@@ -236,11 +256,12 @@ def to_mermaid(
 
             # Create merge point
             merge_id = f"{node.id}_merge"
+            branches = node.branches or {}
 
             # True branch
-            if node.branches.get("true"):
+            if branches.get("true"):
                 branch_prev = node.id
-                for i, child in enumerate(node.branches["true"]):
+                for i, child in enumerate(branches["true"]):
                     lines.append(f"    {child.id}[{child.label}]")
                     if i == 0:
                         lines.append(f"    {node.id} -->|Yes| {child.id}")
@@ -252,9 +273,9 @@ def to_mermaid(
                 lines.append(f"    {node.id} -->|Yes| {merge_id}")
 
             # False branch
-            if node.branches.get("false"):
+            if branches.get("false"):
                 branch_prev = node.id
-                for i, child in enumerate(node.branches["false"]):
+                for i, child in enumerate(branches["false"]):
                     lines.append(f"    {child.id}[{child.label}]")
                     if i == 0:
                         lines.append(f"    {node.id} -->|No| {child.id}")
@@ -281,7 +302,7 @@ def to_mermaid(
 
 
 def to_dot(
-    cadence: Cadence,
+    cadence: Cadence[Any],
     *,
     rankdir: str = "TB",
     node_color: str = "#4A90D9",
@@ -308,17 +329,17 @@ def to_dot(
     lines = [
         "digraph cadence {",
         f"    rankdir={rankdir};",
-        "    node [shape=box, style=filled, fontname=\"Arial\"];",
-        f"    edge [color=\"{edge_color}\"];",
+        '    node [shape=box, style=filled, fontname="Arial"];',
+        f'    edge [color="{edge_color}"];',
         "",
-        f"    START [label=\"{cadence._name}\", shape=oval, fillcolor=\"#90EE90\"];",
+        f'    START [label="{cadence._name}", shape=oval, fillcolor="#90EE90"];',
     ]
 
     prev_id = "START"
 
     for node in nodes:
         if node.measure_type == "single":
-            lines.append(f"    {node.id} [label=\"{node.label}\", fillcolor=\"{node_color}\"];")
+            lines.append(f'    {node.id} [label="{node.label}", fillcolor="{node_color}"];')
             lines.append(f"    {prev_id} -> {node.id};")
             prev_id = node.id
 
@@ -327,34 +348,29 @@ def to_dot(
             join_id = f"{node.id}_join"
 
             lines.append(
-                f"    {fork_id} [label=\"{node.label}\", "
-                f"shape=parallelogram, fillcolor=\"#FFD700\"];"
+                f'    {fork_id} [label="{node.label}", shape=parallelogram, fillcolor="#FFD700"];'
             )
             lines.append(f"    {prev_id} -> {fork_id};")
 
             lines.append(f"    subgraph cluster_{node.id} {{")
-            lines.append("        label=\"parallel\";")
+            lines.append('        label="parallel";')
             lines.append("        style=dashed;")
 
-            for child in node.children:
+            for child in node.children or []:
                 lines.append(
-                    f"        {child.id} [label=\"{child.label}\", "
-                    f"fillcolor=\"{node_color}\"];"
+                    f'        {child.id} [label="{child.label}", fillcolor="{node_color}"];'
                 )
                 lines.append(f"        {fork_id} -> {child.id};")
                 lines.append(f"        {child.id} -> {join_id};")
 
             lines.append("    }")
-            lines.append(f"    {join_id} [label=\"join\", shape=circle, fillcolor=\"#D3D3D3\"];")
+            lines.append(f'    {join_id} [label="join", shape=circle, fillcolor="#D3D3D3"];')
             prev_id = join_id
 
         elif node.measure_type == "sequence":
             seq_prev = prev_id
-            for child in node.children:
-                lines.append(
-                    f"    {child.id} [label=\"{child.label}\", "
-                    f"fillcolor=\"{node_color}\"];"
-                )
+            for child in node.children or []:
+                lines.append(f'    {child.id} [label="{child.label}", fillcolor="{node_color}"];')
                 lines.append(f"    {seq_prev} -> {child.id};")
                 seq_prev = child.id
             prev_id = seq_prev
@@ -362,59 +378,51 @@ def to_dot(
         elif node.measure_type == "branch":
             # Escape newlines for DOT
             label = node.label.replace("\\n", "\\l")
-            lines.append(
-                f"    {node.id} [label=\"{label}\", "
-                f"shape=diamond, fillcolor=\"#FFA500\"];"
-            )
+            lines.append(f'    {node.id} [label="{label}", shape=diamond, fillcolor="#FFA500"];')
             lines.append(f"    {prev_id} -> {node.id};")
 
             merge_id = f"{node.id}_merge"
+            branches = node.branches or {}
 
             # True branch
-            if node.branches.get("true"):
+            if branches.get("true"):
                 branch_prev = node.id
-                for i, child in enumerate(node.branches["true"]):
-                    lines.append(
-                        f"    {child.id} [label=\"{child.label}\", "
-                        f"fillcolor=\"#90EE90\"];"
-                    )
+                for i, child in enumerate(branches["true"]):
+                    lines.append(f'    {child.id} [label="{child.label}", fillcolor="#90EE90"];')
                     if i == 0:
-                        lines.append(f"    {node.id} -> {child.id} [label=\"Yes\"];")
+                        lines.append(f'    {node.id} -> {child.id} [label="Yes"];')
                     else:
                         lines.append(f"    {branch_prev} -> {child.id};")
                     branch_prev = child.id
                 lines.append(f"    {branch_prev} -> {merge_id};")
             else:
-                lines.append(f"    {node.id} -> {merge_id} [label=\"Yes\"];")
+                lines.append(f'    {node.id} -> {merge_id} [label="Yes"];')
 
             # False branch
-            if node.branches.get("false"):
+            if branches.get("false"):
                 branch_prev = node.id
-                for i, child in enumerate(node.branches["false"]):
-                    lines.append(
-                        f"    {child.id} [label=\"{child.label}\", "
-                        f"fillcolor=\"#FFB6C1\"];"
-                    )
+                for i, child in enumerate(branches["false"]):
+                    lines.append(f'    {child.id} [label="{child.label}", fillcolor="#FFB6C1"];')
                     if i == 0:
-                        lines.append(f"    {node.id} -> {child.id} [label=\"No\"];")
+                        lines.append(f'    {node.id} -> {child.id} [label="No"];')
                     else:
                         lines.append(f"    {branch_prev} -> {child.id};")
                     branch_prev = child.id
                 lines.append(f"    {branch_prev} -> {merge_id};")
             else:
-                lines.append(f"    {node.id} -> {merge_id} [label=\"No\"];")
+                lines.append(f'    {node.id} -> {merge_id} [label="No"];')
 
-            lines.append(f"    {merge_id} [label=\"merge\", shape=circle, fillcolor=\"#D3D3D3\"];")
+            lines.append(f'    {merge_id} [label="merge", shape=circle, fillcolor="#D3D3D3"];')
             prev_id = merge_id
 
         elif node.measure_type == "child":
             label = node.label.replace("\\n", "\\l")
-            lines.append(f"    {node.id} [label=\"{label}\", shape=box3d, fillcolor=\"#DDA0DD\"];")
+            lines.append(f'    {node.id} [label="{label}", shape=box3d, fillcolor="#DDA0DD"];')
             lines.append(f"    {prev_id} -> {node.id};")
             prev_id = node.id
 
     # End node
-    lines.append("    END [label=\"End\", shape=oval, fillcolor=\"#FF6347\"];")
+    lines.append('    END [label="End", shape=oval, fillcolor="#FF6347"];')
     lines.append(f"    {prev_id} -> END;")
     lines.append("}")
 
@@ -422,7 +430,7 @@ def to_dot(
 
 
 def render_svg(
-    cadence: Cadence,
+    cadence: Cadence[Any],
     *,
     format: str = "dot",
     **kwargs: Any,
@@ -459,8 +467,7 @@ def render_svg(
             return result.stdout
         except FileNotFoundError as err:
             raise RuntimeError(
-                "mermaid-cli (mmdc) not found. "
-                "Install with: npm install -g @mermaid-js/mermaid-cli"
+                "mermaid-cli (mmdc) not found. Install with: npm install -g @mermaid-js/mermaid-cli"
             ) from err
     else:
         # Default to DOT/Graphviz
@@ -482,7 +489,7 @@ def render_svg(
 
 
 def save_diagram(
-    cadence: Cadence,
+    cadence: Cadence[Any],
     path: str,
     *,
     format: str | None = None,
@@ -507,26 +514,26 @@ def save_diagram(
     import subprocess
     from pathlib import Path
 
-    path = Path(path)
-    ext = format or path.suffix.lower()
+    output_path = Path(path)
+    ext = format or output_path.suffix.lower()
 
     if ext in (".mmd", ".mermaid"):
         content = to_mermaid(cadence, **kwargs)
-        path.write_text(content)
+        output_path.write_text(content)
 
     elif ext in (".dot", ".gv"):
         content = to_dot(cadence, **kwargs)
-        path.write_text(content)
+        output_path.write_text(content)
 
     elif ext == ".svg":
         content = render_svg(cadence, **kwargs)
-        path.write_text(content)
+        output_path.write_text(content)
 
     elif ext in (".png", ".pdf"):
         dot_code = to_dot(cadence, **kwargs)
         try:
             subprocess.run(
-                ["dot", f"-T{ext[1:]}", "-o", str(path)],
+                ["dot", f"-T{ext[1:]}", "-o", str(output_path)],
                 input=dot_code,
                 text=True,
                 check=True,
@@ -538,7 +545,7 @@ def save_diagram(
         raise ValueError(f"Unknown format: {ext}")
 
 
-def print_cadence(cadence: Cadence) -> None:
+def print_cadence(cadence: Cadence[Any]) -> None:
     """
     Print a text representation of a cadence to stdout.
 
@@ -555,25 +562,28 @@ def print_cadence(cadence: Cadence) -> None:
 
         elif node.measure_type == "parallel":
             print(f"{prefix} ⫘ PARALLEL: {node.label}")
-            for j, child in enumerate(node.children):
-                child_prefix = "│   ├──" if j < len(node.children) - 1 else "│   └──"
+            children = node.children or []
+            for j, child in enumerate(children):
+                child_prefix = "│   ├──" if j < len(children) - 1 else "│   └──"
                 print(f"{child_prefix} {child.label}")
 
         elif node.measure_type == "sequence":
             print(f"{prefix} ▶ SEQUENCE: {node.label}")
-            for j, child in enumerate(node.children):
-                child_prefix = "│   ├──" if j < len(node.children) - 1 else "│   └──"
+            children = node.children or []
+            for j, child in enumerate(children):
+                child_prefix = "│   ├──" if j < len(children) - 1 else "│   └──"
                 print(f"{child_prefix} {child.label}")
 
         elif node.measure_type == "branch":
             print(f"{prefix} ◇ BRANCH: {node.label}")
-            if node.branches.get("true"):
+            branches = node.branches or {}
+            if branches.get("true"):
                 print("│   ├── YES:")
-                for child in node.branches["true"]:
+                for child in branches["true"]:
                     print(f"│   │   └── {child.label}")
-            if node.branches.get("false"):
+            if branches.get("false"):
                 print("│   └── NO:")
-                for child in node.branches["false"]:
+                for child in branches["false"]:
                     print(f"│       └── {child.label}")
 
         elif node.measure_type == "child":

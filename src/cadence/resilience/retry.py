@@ -67,14 +67,10 @@ def retry(
                     if attempt == max_attempts:
                         # Get note name from function or first arg
                         note_name = getattr(fn, "__name__", "unknown")
-                        raise RetryExhaustedError(
-                            note_name, max_attempts, error
-                        ) from error
+                        raise RetryExhaustedError(note_name, max_attempts, error) from error
 
                     # Calculate delay
-                    current_delay = _calculate_delay(
-                        attempt, delay, backoff, max_delay, jitter
-                    )
+                    current_delay = _calculate_delay(attempt, delay, backoff, max_delay, jitter)
                     await asyncio.sleep(current_delay)
 
             # Should never reach here, but just in case
@@ -99,13 +95,9 @@ def retry(
 
                     if attempt == max_attempts:
                         note_name = getattr(fn, "__name__", "unknown")
-                        raise RetryExhaustedError(
-                            note_name, max_attempts, error
-                        ) from error
+                        raise RetryExhaustedError(note_name, max_attempts, error) from error
 
-                    current_delay = _calculate_delay(
-                        attempt, delay, backoff, max_delay, jitter
-                    )
+                    current_delay = _calculate_delay(attempt, delay, backoff, max_delay, jitter)
                     time.sleep(current_delay)
 
             raise RetryExhaustedError(

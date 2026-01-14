@@ -6,7 +6,7 @@ import asyncio
 import inspect
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from cadence.nodes.base import Measure
 from cadence.note import Note
@@ -48,7 +48,7 @@ class ParallelMeasure(Measure[ScoreT]):
         score: ScoreT,
         name: str,
         tasks: list[Callable[[ScoreT], Any]],
-        merge_strategy: Callable = MergeStrategy.fail_on_conflict,
+        merge_strategy: Callable[..., Any] = MergeStrategy.fail_on_conflict,
     ) -> None:
         super().__init__(score, name)
         self._tasks = tasks
@@ -70,13 +70,14 @@ class ParallelMeasure(Measure[ScoreT]):
     async def _execute_with_cow(self) -> bool | None:
         """Execute with copy-on-write score isolation."""
         # Create isolated snapshots for each task
-        snapshots = [self._score._snapshot() for _ in self._tasks]
+        score_as_score = cast(Score, self._score)
+        snapshots: list[Any] = [score_as_score._snapshot() for _ in self._tasks]
 
         # Separate async and sync tasks with their snapshots
-        async_tasks = []
-        async_snapshots = []
-        sync_tasks = []
-        sync_snapshots = []
+        async_tasks: list[Callable[..., Any]] = []
+        async_snapshots: list[Any] = []
+        sync_tasks: list[Callable[..., Any]] = []
+        sync_snapshots: list[Any] = []
 
         for task, snapshot in zip(self._tasks, snapshots, strict=True):
             if _is_async_callable(task):
@@ -88,8 +89,7 @@ class ParallelMeasure(Measure[ScoreT]):
 
         # Create coroutines for async tasks
         async_coros = [
-            task(snapshot)
-            for task, snapshot in zip(async_tasks, async_snapshots, strict=True)
+            task(snapshot) for task, snapshot in zip(async_tasks, async_snapshots, strict=True)
         ]
 
         # Run sync tasks in thread pool
@@ -107,7 +107,7 @@ class ParallelMeasure(Measure[ScoreT]):
 
         # Merge all snapshots back into original score
         all_snapshots = async_snapshots + sync_snapshots
-        merge_snapshots(self._score, all_snapshots, self._merge_strategy)
+        merge_snapshots(score_as_score, all_snapshots, self._merge_strategy)
 
         return None
 
@@ -128,8 +128,7 @@ class ParallelMeasure(Measure[ScoreT]):
             loop = asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=len(sync_tasks)) as executor:
                 sync_futures = [
-                    loop.run_in_executor(executor, task, self._score)
-                    for task in sync_tasks
+                    loop.run_in_executor(executor, task, self._score) for task in sync_tasks
                 ]
                 await asyncio.gather(*async_coros, *sync_futures)
         elif async_coros:

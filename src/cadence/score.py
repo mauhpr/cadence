@@ -16,6 +16,7 @@ from typing import (
     Any,
     Generic,
     TypeVar,
+    cast,
 )
 
 T = TypeVar("T")
@@ -173,31 +174,31 @@ class MergeStrategy:
 
             # List: extend
             if isinstance(first, list):
-                merged = []
+                merged_list: list[Any] = []
                 for v in values:
                     if isinstance(v, list):
-                        merged.extend(v)
+                        merged_list.extend(v)
                     else:
-                        merged.append(v)
-                object.__setattr__(original, field, merged)
+                        merged_list.append(v)
+                object.__setattr__(original, field, merged_list)
 
             # Set: union
             elif isinstance(first, set):
-                merged = set()
+                merged_set: set[Any] = set()
                 for v in values:
                     if isinstance(v, set):
-                        merged.update(v)
+                        merged_set.update(v)
                     else:
-                        merged.add(v)
-                object.__setattr__(original, field, merged)
+                        merged_set.add(v)
+                object.__setattr__(original, field, merged_set)
 
             # Dict: merge (later values override)
             elif isinstance(first, dict):
-                merged = {}
+                merged_dict: dict[Any, Any] = {}
                 for v in values:
                     if isinstance(v, dict):
-                        merged.update(v)
-                object.__setattr__(original, field, merged)
+                        merged_dict.update(v)
+                object.__setattr__(original, field, merged_dict)
 
             # Same value: no conflict
             elif all(v == first for v in values):
@@ -428,8 +429,8 @@ class ImmutableScore:
 
     def replace(self, **changes: Any) -> ImmutableScore:
         """Create a new instance with specified fields replaced."""
-        return replace(self, **changes)
+        return replace(self, **changes)  # type: ignore[type-var]
 
     def with_field(self, field: str, value: Any) -> ImmutableScore:
         """Create a new instance with one field replaced."""
-        return replace(self, **{field: value})
+        return replace(self, **{field: value})  # type: ignore[type-var]

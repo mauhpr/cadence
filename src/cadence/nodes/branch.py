@@ -50,10 +50,11 @@ class BranchMeasure(Measure[ScoreT]):
             return None
 
         # Execute selected tasks
+        branch_measure: Measure[ScoreT]
         if self._parallel:
-            measure = ParallelMeasure(self._score, f"{self._name}_branch", tasks)
+            branch_measure = ParallelMeasure(self._score, f"{self._name}_branch", tasks)
         else:
-            measure = SequenceMeasure(self._score, f"{self._name}_branch", tasks)
+            branch_measure = SequenceMeasure(self._score, f"{self._name}_branch", tasks)
 
-        await measure.execute()
+        await branch_measure.execute()
         return None

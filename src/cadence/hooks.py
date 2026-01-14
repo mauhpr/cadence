@@ -551,9 +551,9 @@ class DebugHooks(CadenceHooks):
         self._show_timing = show_timing
 
     async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"CADENCE: {cadence_name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         if self._show_score:
             print(f"Initial score: {score}")
         print()
@@ -574,7 +574,7 @@ class DebugHooks(CadenceHooks):
             print(f"Duration: {duration:.3f}s")
         if self._show_score:
             print(f"Final score: {score}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
     async def before_note(self, note_name: str, score: ScoreT) -> None:
         print(f"→ {note_name}")
@@ -598,8 +598,9 @@ class DebugHooks(CadenceHooks):
 # --- Functional Hooks ---
 
 
-def before_note(callback: Callable) -> CadenceHooks:
+def before_note(callback: Callable[..., Any]) -> CadenceHooks:
     """Create a hooks instance with just a before_note callback."""
+
     class CallbackHooks(CadenceHooks):
         async def before_note(self, note_name: str, score: ScoreT) -> None:
             result = callback(note_name, score)
@@ -609,8 +610,9 @@ def before_note(callback: Callable) -> CadenceHooks:
     return CallbackHooks()
 
 
-def after_note(callback: Callable) -> CadenceHooks:
+def after_note(callback: Callable[..., Any]) -> CadenceHooks:
     """Create a hooks instance with just an after_note callback."""
+
     class CallbackHooks(CadenceHooks):
         async def after_note(
             self,
@@ -626,8 +628,9 @@ def after_note(callback: Callable) -> CadenceHooks:
     return CallbackHooks()
 
 
-def on_error(callback: Callable) -> CadenceHooks:
+def on_error(callback: Callable[..., Any]) -> CadenceHooks:
     """Create a hooks instance with just an on_error callback."""
+
     class CallbackHooks(CadenceHooks):
         async def on_error(
             self,
@@ -638,6 +641,6 @@ def on_error(callback: Callable) -> CadenceHooks:
             result = callback(note_name, score, error)
             if inspect.iscoroutine(result):
                 result = await result
-            return result
+            return bool(result) if result is not None else None
 
     return CallbackHooks()

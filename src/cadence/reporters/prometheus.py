@@ -6,10 +6,14 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 try:
-    from prometheus_client import Counter, Gauge, Histogram
+    from prometheus_client import Counter, Gauge, Histogram  # type: ignore[import-not-found]
+
     HAS_PROMETHEUS = True
 except ImportError:
     HAS_PROMETHEUS = False
+    Counter = None
+    Gauge = None
+    Histogram = None
 
 ScoreT = TypeVar("ScoreT")
 
@@ -258,9 +262,9 @@ class MetricsMiddleware:
 
     async def __call__(
         self,
-        scope: dict,
-        receive: Callable,
-        send: Callable,
+        scope: dict[str, Any],
+        receive: Callable[..., Any],
+        send: Callable[..., Any],
     ) -> None:
         if scope["type"] == "http" and scope["path"] == self.path:
             await self._metrics_app(scope, receive, send)

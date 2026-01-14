@@ -67,7 +67,7 @@ def cadence_endpoint(
     score_factory: Callable[..., ScoreT],
     response_mapper: Callable[[ScoreT], Any] | None = None,
     error_handler: Callable[[Exception], Response] | None = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Create a FastAPI endpoint from a Cadence.
 
@@ -135,7 +135,7 @@ def cadence_endpoint(
 def with_cadence(
     cadence_factory: Callable[[Any], Cadence[ScoreT]],
     response_mapper: Callable[[ScoreT], Any] | None = None,
-) -> Callable[[Callable[..., ScoreT]], Callable]:
+) -> Callable[[Callable[..., ScoreT]], Callable[..., Any]]:
     """
     Decorator to wrap a FastAPI endpoint with cadence execution.
 
@@ -166,7 +166,7 @@ def with_cadence(
     """
     _check_fastapi()
 
-    def decorator(func: Callable[..., ScoreT]) -> Callable:
+    def decorator(func: Callable[..., ScoreT]) -> Callable[..., Any]:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Get initial score from decorated function
@@ -219,6 +219,7 @@ class CadenceDependency(Generic[ScoreT]):
 
     async def __call__(self) -> Callable[[ScoreT], Any]:
         """Return an execution function."""
+
         async def execute(score: ScoreT) -> ScoreT:
             # Clone cadence with new score
             new_cadence = Cadence(self._cadence.name, score)
@@ -250,8 +251,8 @@ class CadenceMiddleware:
     def __init__(
         self,
         app: Any,
-        reporter: Callable | None = None,
-        error_handler: Callable | None = None,
+        reporter: Callable[..., Any] | None = None,
+        error_handler: Callable[..., Any] | None = None,
     ) -> None:
         _check_fastapi()
         self.app = app
@@ -260,9 +261,9 @@ class CadenceMiddleware:
 
     async def __call__(
         self,
-        scope: dict,
-        receive: Callable,
-        send: Callable,
+        scope: dict[str, Any],
+        receive: Callable[..., Any],
+        send: Callable[..., Any],
     ) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)

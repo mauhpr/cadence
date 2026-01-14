@@ -19,7 +19,7 @@ class Note:
 
     def __init__(
         self,
-        fn: Callable,
+        fn: Callable[..., Any],
         *,
         name: str | None = None,
         description: str | None = None,

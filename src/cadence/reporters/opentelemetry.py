@@ -6,12 +6,18 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 try:
-    from opentelemetry import trace
-    from opentelemetry.metrics import get_meter
-    from opentelemetry.trace import Span, Status, StatusCode
+    from opentelemetry import trace  # type: ignore[import-not-found]
+    from opentelemetry.metrics import get_meter  # type: ignore[import-not-found]
+    from opentelemetry.trace import Span, Status, StatusCode  # type: ignore[import-not-found]
+
     HAS_OTEL = True
 except ImportError:
     HAS_OTEL = False
+    trace = None
+    get_meter = None
+    Span = None
+    Status = None
+    StatusCode = None
 
 ScoreT = TypeVar("ScoreT")
 

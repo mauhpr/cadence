@@ -34,15 +34,16 @@ def _is_async_callable(obj: Any) -> bool:
         return inspect.iscoroutinefunction(obj.__call__)
     return False
 
+
 ScoreT = TypeVar("ScoreT")
 ChildScoreT = TypeVar("ChildScoreT")
 
 # Type aliases for callbacks
-Task = Callable[[ScoreT], Any]
-Condition = Callable[[ScoreT], Any]
-Merge = Callable[[ScoreT, Any], Any]
-TimeReporter = Callable[[str, float, ScoreT], Any]
-ErrorHandler = Callable[[ScoreT, Exception], Any]
+Task = Callable[[Any], Any]
+Condition = Callable[[Any], Any]
+Merge = Callable[[Any, Any], Any]
+TimeReporter = Callable[[str, float, Any], Any]
+ErrorHandler = Callable[[Any, Exception], Any]
 
 
 class Cadence(Generic[ScoreT]):
@@ -120,7 +121,6 @@ class Cadence(Generic[ScoreT]):
         self._measures.append(measure)
         return self
 
-
     def sequence(
         self,
         name: str,
@@ -137,8 +137,7 @@ class Cadence(Generic[ScoreT]):
             self for chaining
         """
         wrapped_tasks = [
-            self._wrap_with_timing(f"{name}[{i}]", task)
-            for i, task in enumerate(tasks)
+            self._wrap_with_timing(f"{name}[{i}]", task) for i, task in enumerate(tasks)
         ]
         measure = SequenceMeasure(self._score, name, wrapped_tasks)
         self._measures.append(measure)
@@ -149,7 +148,7 @@ class Cadence(Generic[ScoreT]):
         name: str,
         tasks: list[Task],
         *,
-        merge_strategy: Callable = MergeStrategy.fail_on_conflict,
+        merge_strategy: Callable[..., Any] = MergeStrategy.fail_on_conflict,
     ) -> Cadence[ScoreT]:
         """
         Add multiple tasks to execute in parallel (synchronized).
@@ -169,13 +168,11 @@ class Cadence(Generic[ScoreT]):
             self for chaining
         """
         wrapped_tasks = [
-            self._wrap_with_timing(f"{name}[{i}]", task)
-            for i, task in enumerate(tasks)
+            self._wrap_with_timing(f"{name}[{i}]", task) for i, task in enumerate(tasks)
         ]
         measure = ParallelMeasure(self._score, name, wrapped_tasks, merge_strategy)
         self._measures.append(measure)
         return self
-
 
     def split(
         self,
@@ -200,8 +197,7 @@ class Cadence(Generic[ScoreT]):
             self for chaining
         """
         wrapped_if = [
-            self._wrap_with_timing(f"{name}_if[{i}]", task)
-            for i, task in enumerate(if_true)
+            self._wrap_with_timing(f"{name}_if[{i}]", task) for i, task in enumerate(if_true)
         ]
         wrapped_else = [
             self._wrap_with_timing(f"{name}_else[{i}]", task)
@@ -217,7 +213,6 @@ class Cadence(Generic[ScoreT]):
         )
         self._measures.append(measure)
         return self
-
 
     def child(
         self,
@@ -334,9 +329,7 @@ class Cadence(Generic[ScoreT]):
 
                 # Call after_note hooks (success)
                 note_elapsed = time.perf_counter() - note_start
-                await self._hooks_manager.after_note(
-                    measure.name, self._score, note_elapsed
-                )
+                await self._hooks_manager.after_note(measure.name, self._score, note_elapsed)
 
                 # Handle interrupt signal
                 if result is True:
@@ -345,9 +338,7 @@ class Cadence(Generic[ScoreT]):
             except CadenceError as error:
                 # Call after_note hooks (with error)
                 note_elapsed = time.perf_counter() - note_start
-                await self._hooks_manager.after_note(
-                    measure.name, self._score, note_elapsed, error
-                )
+                await self._hooks_manager.after_note(measure.name, self._score, note_elapsed, error)
                 await self._hooks_manager.on_error(measure.name, self._score, error)
 
                 cadence_error = error
@@ -360,9 +351,7 @@ class Cadence(Generic[ScoreT]):
                 else:
                     # Call after_cadence before raising
                     elapsed = time.perf_counter() - cadence_start
-                    await self._hooks_manager.after_cadence(
-                        self._name, self._score, elapsed, error
-                    )
+                    await self._hooks_manager.after_cadence(self._name, self._score, elapsed, error)
                     raise
 
             except Exception as error:
@@ -398,16 +387,12 @@ class Cadence(Generic[ScoreT]):
         # Report total cadence time
         elapsed = time.perf_counter() - cadence_start
         if self._time_reporter:
-            reporter_result = self._time_reporter(
-                f"{self._name}:TOTAL", elapsed, self._score
-            )
+            reporter_result = self._time_reporter(f"{self._name}:TOTAL", elapsed, self._score)
             if inspect.iscoroutine(reporter_result):
                 await reporter_result
 
         # Call after_cadence hooks
-        await self._hooks_manager.after_cadence(
-            self._name, self._score, elapsed, cadence_error
-        )
+        await self._hooks_manager.after_cadence(self._name, self._score, elapsed, cadence_error)
 
         return self._score
 
@@ -426,7 +411,6 @@ class Cadence(Generic[ScoreT]):
         """Get the current score."""
         return self._score
 
-
     def _wrap_with_timing(
         self,
         name: str,
@@ -439,6 +423,7 @@ class Cadence(Generic[ScoreT]):
         reporter = self._time_reporter
 
         if _is_async_callable(task):
+
             async def timed_async(score: ScoreT) -> Any:
                 start = time.perf_counter()
                 result = await task(score)
@@ -447,8 +432,10 @@ class Cadence(Generic[ScoreT]):
                 if inspect.iscoroutine(reporter_result):
                     await reporter_result
                 return result
+
             return timed_async
         else:
+
             def timed_sync(score: ScoreT) -> Any:
                 start = time.perf_counter()
                 result = task(score)
@@ -456,6 +443,7 @@ class Cadence(Generic[ScoreT]):
                 # Sync task can't await, just call reporter
                 reporter(name, elapsed, score)
                 return result
+
             return timed_sync
 
     def __repr__(self) -> str:

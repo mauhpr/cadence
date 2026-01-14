@@ -56,7 +56,7 @@ def cadence_route(
     score_factory: Callable[..., ScoreT] | None = None,
     response_factory: Callable[[ScoreT], Any] | None = None,
     error_handler: Callable[[Exception], Any] | None = None,
-) -> Callable:
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to wrap a Flask route with a cadence.
 
@@ -89,7 +89,7 @@ def cadence_route(
     """
     flask = _get_flask()
 
-    def decorator(fn: Callable) -> Callable:
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             try:
@@ -115,6 +115,7 @@ def cadence_route(
 
                 # Clone cadence with new score
                 from cadence.cadence import Cadence
+
                 cadence_instance = Cadence(cadence._name, score)
                 cadence_instance._measures = cadence._measures
                 cadence_instance._time_reporter = cadence._time_reporter
@@ -143,7 +144,7 @@ def with_cadence(
     score_class: type[ScoreT],
     *,
     from_request: Callable[..., dict[str, Any]] | None = None,
-) -> Callable:
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator that injects a cadence-ready score into the view function.
 
@@ -168,12 +169,12 @@ def with_cadence(
     """
     flask = _get_flask()
 
-    def decorator(fn: Callable) -> Callable:
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Extract data from request
             if from_request is not None:
-                data = from_request(flask.request)
+                data: dict[str, Any] = from_request(flask.request)
             elif flask.request.method in ("POST", "PUT", "PATCH"):
                 data = flask.request.get_json(silent=True) or {}
             else:
@@ -281,7 +282,7 @@ class CadenceBlueprint:
                     score = score_factory(flask.request, **url_kwargs)
                 else:
                     # Default: use request JSON + URL params
-                    data = {}
+                    data: dict[str, Any] = {}
                     if flask.request.method in ("POST", "PUT", "PATCH"):
                         data = flask.request.get_json(silent=True) or {}
                     data.update(url_kwargs)
@@ -296,6 +297,7 @@ class CadenceBlueprint:
 
                 # Clone and run cadence
                 from cadence.cadence import Cadence
+
                 cadence_instance = Cadence(cadence._name, score)
                 cadence_instance._measures = cadence._measures
                 cadence_instance._time_reporter = cadence._time_reporter
@@ -323,9 +325,10 @@ class CadenceBlueprint:
             methods=methods,
         )
 
-    def route(self, rule: str, **options: Any) -> Callable:
+    def route(self, rule: str, **options: Any) -> Callable[..., Any]:
         """Standard Flask route decorator (passthrough)."""
-        return self._blueprint.route(rule, **options)
+        result: Callable[..., Any] = self._blueprint.route(rule, **options)
+        return result
 
     def __getattr__(self, name: str) -> Any:
         """Delegate unknown attributes to underlying blueprint."""
@@ -354,8 +357,8 @@ class CadenceExtension:
     """
 
     def __init__(self, app: Any | None = None) -> None:
-        self._reporter: Callable | None = None
-        self._error_handler: Callable | None = None
+        self._reporter: Callable[..., Any] | None = None
+        self._error_handler: Callable[..., Any] | None = None
 
         if app is not None:
             self.init_app(app)
@@ -368,20 +371,21 @@ class CadenceExtension:
         # Register error handler if configured
         if self._error_handler:
             from cadence.exceptions import CadenceError
+
             app.register_error_handler(CadenceError, self._error_handler)
 
-    def set_reporter(self, reporter: Callable) -> None:
+    def set_reporter(self, reporter: Callable[..., Any]) -> None:
         """Set the default time reporter for all cadences."""
         self._reporter = reporter
 
-    def set_error_handler(self, handler: Callable) -> None:
+    def set_error_handler(self, handler: Callable[..., Any]) -> None:
         """Set the default error handler for all cadences."""
         self._error_handler = handler
 
     @property
-    def reporter(self) -> Callable | None:
+    def reporter(self) -> Callable[..., Any] | None:
         return self._reporter
 
     @property
-    def error_handler(self) -> Callable | None:
+    def error_handler(self) -> Callable[..., Any] | None:
         return self._error_handler
