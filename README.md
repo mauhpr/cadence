@@ -1,7 +1,7 @@
 # Cadence
 
-[![PyPI version](https://badge.fury.io/py/cadence-flow.svg)](https://badge.fury.io/py/cadence-flow)
-[![Python Versions](https://img.shields.io/pypi/pyversions/cadence-flow.svg)](https://pypi.org/project/cadence-flow/)
+[![PyPI version](https://badge.fury.io/py/cadence-orchestration.svg)](https://badge.fury.io/py/cadence-orchestration)
+[![Python Versions](https://img.shields.io/pypi/pyversions/cadence-orchestration.svg)](https://pypi.org/project/cadence-orchestration/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://github.com/mauhpr/cadence/actions/workflows/test.yml/badge.svg)](https://github.com/mauhpr/cadence/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/mauhpr/cadence/branch/main/graph/badge.svg)](https://codecov.io/gh/mauhpr/cadence)
@@ -24,26 +24,26 @@ Cadence lets you build complex service orchestration with a clean, readable API.
 ## Installation
 
 ```bash
-pip install cadence-flow
+pip install cadence-orchestration
 ```
 
 With optional integrations:
 
 ```bash
 # FastAPI integration
-pip install cadence-flow[fastapi]
+pip install cadence-orchestration[fastapi]
 
 # Flask integration
-pip install cadence-flow[flask]
+pip install cadence-orchestration[flask]
 
 # OpenTelemetry tracing
-pip install cadence-flow[opentelemetry]
+pip install cadence-orchestration[opentelemetry]
 
 # Prometheus metrics
-pip install cadence-flow[prometheus]
+pip install cadence-orchestration[prometheus]
 
 # All integrations
-pip install cadence-flow[all]
+pip install cadence-orchestration[all]
 ```
 
 ## Quick Start
@@ -385,9 +385,9 @@ async def handle_error(context, error):
 
 ## Documentation
 
-- [API Reference](https://github.com/mauhpr/cadence/docs)
-- [Examples](https://github.com/mauhpr/cadence/tree/main/examples)
-- [Design Documents](https://github.com/mauhpr/cadence/tree/main/docs/design)
+- [API Reference](docs/api.md)
+- [Design Documents](docs/design.md)
+- [Examples](examples/)
 
 ## Contributing
 
