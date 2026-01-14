@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-01-14
+
+### Changed
+
+- **Documentation**: Updated `docs/design.md` to accurately reflect current capabilities
+  - Added "Current Capabilities" section documenting shipped features (visualization, DebugHooks, TimingHooks)
+  - Updated "Future Directions" to list only unimplemented features
+
+### Removed
+
+- Removed completed `plans/` folder (test coverage plan is done)
+
 ## [0.4.0] - 2025-01-14
 
 ### Added
@@ -129,7 +141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom Exceptions**: `CadenceError`, `NoteError`, `TimeoutError`, `RetryExhaustedError`
 - Basic test suite with pytest and pytest-asyncio
 
-[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/mauhpr/cadence/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mauhpr/cadence/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mauhpr/cadence/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mauhpr/cadence/compare/v0.1.0...v0.2.0
