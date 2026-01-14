@@ -1,4 +1,4 @@
-"""Conditional branching node."""
+"""Conditional branching measure."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from cadence.nodes.base import Node
-from cadence.nodes.parallel import ParallelNode
-from cadence.nodes.sequence import SequenceNode
+from cadence.nodes.base import Measure
+from cadence.nodes.parallel import ParallelMeasure
+from cadence.nodes.sequence import SequenceMeasure
 
-ContextT = TypeVar("ContextT")
+ScoreT = TypeVar("ScoreT")
 
 
-class BranchNode(Node[ContextT]):
+class BranchMeasure(Measure[ScoreT]):
     """
     Conditional branching based on a condition function.
 
@@ -22,15 +22,15 @@ class BranchNode(Node[ContextT]):
 
     def __init__(
         self,
-        context: ContextT,
+        score: ScoreT,
         name: str,
-        condition: Callable[[ContextT], Any],
-        if_tasks: list[Callable[[ContextT], Any]],
-        else_tasks: list[Callable[[ContextT], Any]] | None = None,
+        condition: Callable[[ScoreT], Any],
+        if_tasks: list[Callable[[ScoreT], Any]],
+        else_tasks: list[Callable[[ScoreT], Any]] | None = None,
         *,
         parallel: bool = False,
     ) -> None:
-        super().__init__(context, name)
+        super().__init__(score, name)
         self._condition = condition
         self._if_tasks = if_tasks
         self._else_tasks = else_tasks or []
@@ -39,7 +39,7 @@ class BranchNode(Node[ContextT]):
     async def execute(self) -> bool | None:
         """Evaluate condition and execute appropriate branch."""
         # Evaluate condition
-        result = self._condition(self._context)
+        result = self._condition(self._score)
         if inspect.iscoroutine(result):
             result = await result
 
@@ -50,10 +50,11 @@ class BranchNode(Node[ContextT]):
             return None
 
         # Execute selected tasks
+        branch_measure: Measure[ScoreT]
         if self._parallel:
-            node = ParallelNode(self._context, f"{self._name}_branch", tasks)
+            branch_measure = ParallelMeasure(self._score, f"{self._name}_branch", tasks)
         else:
-            node = SequenceNode(self._context, f"{self._name}_branch", tasks)
+            branch_measure = SequenceMeasure(self._score, f"{self._name}_branch", tasks)
 
-        await node.execute()
+        await branch_measure.execute()
         return None

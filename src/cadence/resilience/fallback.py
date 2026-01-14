@@ -1,4 +1,4 @@
-"""Fallback decorator for step resilience."""
+"""Fallback decorator for note resilience."""
 
 from __future__ import annotations
 
@@ -32,12 +32,12 @@ def fallback(
 
     Example:
         @fallback(default=[])
-        async def fetch_optional_data(ctx):
-            ctx.extras = await api.get_extras(ctx.id)
+        async def fetch_optional_data(score):
+            score.extras = await api.get_extras(score.id)
 
         @fallback(handler=lambda e: {"error": str(e), "cached": True})
-        async def fetch_with_fallback(ctx):
-            ctx.data = await volatile_api.get(ctx.id)
+        async def fetch_with_fallback(score):
+            score.data = await volatile_api.get(score.id)
     """
 
     catch_on = on or (Exception,)

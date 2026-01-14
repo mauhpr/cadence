@@ -4,25 +4,26 @@ Cadence - A declarative Python framework for orchestrating service logic with rh
 Build APIs and services with explicit, composable control flow.
 
 Example:
-    from cadence import Cadence, Context, beat
+    from cadence import Cadence, Score, note
 
     @dataclass
-    class OrderContext(Context):
+    class OrderScore(Score):
         order_id: str
         items: list = None
 
-    @beat
-    async def fetch_items(ctx: OrderContext):
-        ctx.items = await db.get_items(ctx.order_id)
+    @note
+    async def fetch_items(score: OrderScore):
+        score.items = await db.get_items(score.order_id)
 
     cadence = (
-        Cadence("checkout", OrderContext(order_id="123"))
+        Cadence("checkout", OrderScore(order_id="123"))
         .then("fetch", fetch_items)
         .sync("enrich", [get_prices, get_stock])
         .run()
     )
 """
 
+from cadence.cadence import Cadence
 from cadence.diagram import (
     print_cadence,
     render_svg,
@@ -30,8 +31,7 @@ from cadence.diagram import (
     to_dot,
     to_mermaid,
 )
-from cadence.exceptions import BeatError, CadenceError, RetryExhaustedError, TimeoutError
-from cadence.flow import Cadence
+from cadence.exceptions import CadenceError, NoteError, RetryExhaustedError, TimeoutError
 from cadence.hooks import (
     CadenceHooks,
     DebugHooks,
@@ -41,6 +41,7 @@ from cadence.hooks import (
     TimingHooks,
     TracingHooks,
 )
+from cadence.note import Note, note
 from cadence.reporters import console_reporter, json_reporter
 from cadence.resilience import (
     CircuitBreaker,
@@ -52,32 +53,31 @@ from cadence.resilience import (
     timeout,
 )
 from cadence.result import Err, Ok, Result, err, ok
-from cadence.state import (
+from cadence.score import (
     Atomic,
     AtomicDict,
     AtomicList,
-    Context,
-    ImmutableContext,
+    ImmutableScore,
     MergeConflict,
     MergeStrategy,
+    Score,
     merge_snapshots,
 )
-from cadence.step import Beat, beat
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     # Core
     "Cadence",
-    "Context",
-    "ImmutableContext",
-    "beat",
-    "Beat",
+    "Score",
+    "ImmutableScore",
+    "note",
+    "Note",
     # Atomic wrappers
     "Atomic",
     "AtomicList",
     "AtomicDict",
-    # Context merging
+    # Score merging
     "MergeConflict",
     "MergeStrategy",
     "merge_snapshots",
@@ -89,7 +89,7 @@ __all__ = [
     "err",
     # Exceptions
     "CadenceError",
-    "BeatError",
+    "NoteError",
     "TimeoutError",
     "RetryExhaustedError",
     "CircuitOpenError",

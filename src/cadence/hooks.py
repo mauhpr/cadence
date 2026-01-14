@@ -1,9 +1,9 @@
 """Middleware and hooks system for Cadence.
 
-Provides hooks for intercepting cadence and beat execution:
+Provides hooks for intercepting cadence and note execution:
 - before_cadence / after_cadence: Called at cadence start/end
-- before_beat / after_beat: Called before/after each beat
-- on_error: Called when a beat or cadence fails
+- before_note / after_note: Called before/after each note
+- on_error: Called when a note or cadence fails
 - on_retry: Called before each retry attempt
 
 Example:
@@ -12,7 +12,7 @@ Example:
 
     # Using built-in hooks
     cadence = (
-        Cadence("checkout", OrderContext())
+        Cadence("checkout", OrderScore())
         .with_hooks(LoggingHooks())
         .with_hooks(TimingHooks())
         .then("process", process)
@@ -20,11 +20,11 @@ Example:
 
     # Custom hooks
     class MyHooks(CadenceHooks):
-        async def before_beat(self, beat_name, context):
-            print(f"Starting: {beat_name}")
+        async def before_note(self, note_name, score):
+            print(f"Starting: {note_name}")
 
-        async def after_beat(self, beat_name, context, duration, error=None):
-            print(f"Completed: {beat_name} in {duration:.3f}s")
+        async def after_note(self, note_name, score, duration, error=None):
+            print(f"Completed: {note_name} in {duration:.3f}s")
 
     cadence = cadence.with_hooks(MyHooks())
 """
@@ -34,30 +34,29 @@ from __future__ import annotations
 import inspect
 import logging
 import time
-from abc import ABC
 from collections.abc import Callable
 from typing import (
     Any,
     TypeVar,
 )
 
-ContextT = TypeVar("ContextT")
+ScoreT = TypeVar("ScoreT")
 
 logger = logging.getLogger("cadence")
 
 
-class CadenceHooks(ABC):
+class CadenceHooks:
     """
     Base class for cadence hooks.
 
-    Override methods to intercept cadence and beat execution.
+    Override methods to intercept cadence and note execution.
     All methods are optional - override only what you need.
     """
 
     async def before_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
     ) -> None:
         """Called before cadence execution starts."""
         pass
@@ -65,39 +64,39 @@ class CadenceHooks(ABC):
     async def after_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
         """Called after cadence execution completes (success or failure)."""
         pass
 
-    async def before_beat(
+    async def before_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
     ) -> None:
-        """Called before each beat executes."""
+        """Called before each note executes."""
         pass
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
-        """Called after each beat completes (success or failure)."""
+        """Called after each note completes (success or failure)."""
         pass
 
     async def on_error(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         error: Exception,
     ) -> bool | None:
         """
-        Called when a beat fails.
+        Called when a note fails.
 
         Return True to suppress the error and continue.
         Return False or None to propagate the error.
@@ -106,8 +105,8 @@ class CadenceHooks(ABC):
 
     async def on_retry(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         attempt: int,
         max_attempts: int,
         error: Exception,
@@ -158,49 +157,49 @@ class HooksManager:
                 results.append(result)
         return results
 
-    async def before_cadence(self, cadence_name: str, context: ContextT) -> None:
-        await self._call_hook("before_cadence", cadence_name, context)
+    async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
+        await self._call_hook("before_cadence", cadence_name, score)
 
     async def after_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
-        await self._call_hook("after_cadence", cadence_name, context, duration, error)
+        await self._call_hook("after_cadence", cadence_name, score, duration, error)
 
-    async def before_beat(self, beat_name: str, context: ContextT) -> None:
-        await self._call_hook("before_beat", beat_name, context)
+    async def before_note(self, note_name: str, score: ScoreT) -> None:
+        await self._call_hook("before_note", note_name, score)
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
-        await self._call_hook("after_beat", beat_name, context, duration, error)
+        await self._call_hook("after_note", note_name, score, duration, error)
 
     async def on_error(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         error: Exception,
     ) -> bool:
         """Returns True if any hook suppressed the error."""
-        results = await self._call_hook("on_error", beat_name, context, error)
+        results = await self._call_hook("on_error", note_name, score, error)
         return any(r is True for r in (results or []))
 
     async def on_retry(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         attempt: int,
         max_attempts: int,
         error: Exception,
     ) -> None:
-        await self._call_hook("on_retry", beat_name, context, attempt, max_attempts, error)
+        await self._call_hook("on_retry", note_name, score, attempt, max_attempts, error)
 
 
 # --- Built-in Hooks ---
@@ -208,7 +207,7 @@ class HooksManager:
 
 class LoggingHooks(CadenceHooks):
     """
-    Hooks that log cadence and beat execution.
+    Hooks that log cadence and note execution.
 
     Uses Python's logging module.
 
@@ -228,13 +227,13 @@ class LoggingHooks(CadenceHooks):
         self._level = level
         self._error_level = error_level
 
-    async def before_cadence(self, cadence_name: str, context: ContextT) -> None:
+    async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
         self._logger.log(self._level, f"[{cadence_name}] Starting cadence")
 
     async def after_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
@@ -249,25 +248,25 @@ class LoggingHooks(CadenceHooks):
                 f"[{cadence_name}] Cadence completed in {duration:.3f}s",
             )
 
-    async def before_beat(self, beat_name: str, context: ContextT) -> None:
-        self._logger.log(self._level, f"  → {beat_name}")
+    async def before_note(self, note_name: str, score: ScoreT) -> None:
+        self._logger.log(self._level, f"  → {note_name}")
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
         if error:
             self._logger.log(
                 self._error_level,
-                f"  ✗ {beat_name} failed after {duration:.3f}s: {error}",
+                f"  ✗ {note_name} failed after {duration:.3f}s: {error}",
             )
         else:
             self._logger.log(
                 self._level,
-                f"  ✓ {beat_name} ({duration:.3f}s)",
+                f"  ✓ {note_name} ({duration:.3f}s)",
             )
 
 
@@ -279,7 +278,7 @@ class TimingHooks(CadenceHooks):
 
     Example:
         hooks = TimingHooks()
-        cadence = Cadence("test", ctx).with_hooks(hooks)
+        cadence = Cadence("test", score).with_hooks(hooks)
         await cadence.run()
 
         print(hooks.get_report())
@@ -289,36 +288,36 @@ class TimingHooks(CadenceHooks):
     def __init__(self) -> None:
         self._cadence_name: str | None = None
         self._cadence_start: float = 0.0
-        self._beat_times: dict[str, float] = {}
+        self._note_times: dict[str, float] = {}
         self._total_duration: float = 0.0
 
-    async def before_cadence(self, cadence_name: str, context: ContextT) -> None:
+    async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
         self._cadence_name = cadence_name
         self._cadence_start = time.perf_counter()
-        self._beat_times.clear()
+        self._note_times.clear()
 
     async def after_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
         self._total_duration = duration
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
-        self._beat_times[beat_name] = duration
+        self._note_times[note_name] = duration
 
     @property
-    def beat_times(self) -> dict[str, float]:
-        """Get timing data for all beats."""
-        return self._beat_times.copy()
+    def note_times(self) -> dict[str, float]:
+        """Get timing data for all notes."""
+        return self._note_times.copy()
 
     @property
     def total_duration(self) -> float:
@@ -328,9 +327,9 @@ class TimingHooks(CadenceHooks):
     def get_report(self) -> str:
         """Get a formatted timing report."""
         lines = [f"=== Timing Report: {self._cadence_name} ==="]
-        for beat_name, duration in self._beat_times.items():
+        for note_name, duration in self._note_times.items():
             pct = (duration / self._total_duration * 100) if self._total_duration > 0 else 0
-            lines.append(f"  {beat_name}: {duration:.3f}s ({pct:.1f}%)")
+            lines.append(f"  {note_name}: {duration:.3f}s ({pct:.1f}%)")
         lines.append(f"  TOTAL: {self._total_duration:.3f}s")
         return "\n".join(lines)
 
@@ -341,15 +340,15 @@ class MetricsHooks(CadenceHooks):
 
     Tracks:
     - Cadence execution count (success/failure)
-    - Beat execution count (success/failure)
+    - Note execution count (success/failure)
     - Latency histograms
     - Error rates
 
     Example:
         hooks = MetricsHooks()
         # Use with multiple cadences
-        cadence1 = Cadence("a", ctx).with_hooks(hooks)
-        cadence2 = Cadence("b", ctx).with_hooks(hooks)
+        cadence1 = Cadence("a", score).with_hooks(hooks)
+        cadence2 = Cadence("b", score).with_hooks(hooks)
 
         # Export metrics
         print(hooks.get_metrics())
@@ -357,12 +356,12 @@ class MetricsHooks(CadenceHooks):
 
     def __init__(self) -> None:
         self._cadence_counts: dict[str, dict[str, int]] = {}
-        self._beat_counts: dict[str, dict[str, int]] = {}
+        self._note_counts: dict[str, dict[str, int]] = {}
         self._cadence_durations: dict[str, list[float]] = {}
-        self._beat_durations: dict[str, list[float]] = {}
+        self._note_durations: dict[str, list[float]] = {}
         self._retry_counts: dict[str, int] = {}
 
-    async def before_cadence(self, cadence_name: str, context: ContextT) -> None:
+    async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
         if cadence_name not in self._cadence_counts:
             self._cadence_counts[cadence_name] = {"success": 0, "failure": 0}
             self._cadence_durations[cadence_name] = []
@@ -370,7 +369,7 @@ class MetricsHooks(CadenceHooks):
     async def after_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
@@ -380,32 +379,32 @@ class MetricsHooks(CadenceHooks):
             self._cadence_counts[cadence_name]["success"] += 1
         self._cadence_durations[cadence_name].append(duration)
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
-        if beat_name not in self._beat_counts:
-            self._beat_counts[beat_name] = {"success": 0, "failure": 0}
-            self._beat_durations[beat_name] = []
+        if note_name not in self._note_counts:
+            self._note_counts[note_name] = {"success": 0, "failure": 0}
+            self._note_durations[note_name] = []
 
         if error:
-            self._beat_counts[beat_name]["failure"] += 1
+            self._note_counts[note_name]["failure"] += 1
         else:
-            self._beat_counts[beat_name]["success"] += 1
-        self._beat_durations[beat_name].append(duration)
+            self._note_counts[note_name]["success"] += 1
+        self._note_durations[note_name].append(duration)
 
     async def on_retry(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         attempt: int,
         max_attempts: int,
         error: Exception,
     ) -> None:
-        self._retry_counts[beat_name] = self._retry_counts.get(beat_name, 0) + 1
+        self._retry_counts[note_name] = self._retry_counts.get(note_name, 0) + 1
 
     def get_metrics(self) -> dict[str, Any]:
         """Get all collected metrics."""
@@ -428,7 +427,7 @@ class MetricsHooks(CadenceHooks):
                 }
                 for name, counts in self._cadence_counts.items()
             },
-            "beats": {
+            "notes": {
                 name: {
                     "success": counts["success"],
                     "failure": counts["failure"],
@@ -438,12 +437,12 @@ class MetricsHooks(CadenceHooks):
                         else 0.0
                     ),
                     "avg_duration": (
-                        sum(self._beat_durations[name]) / len(self._beat_durations[name])
-                        if self._beat_durations[name]
+                        sum(self._note_durations[name]) / len(self._note_durations[name])
+                        if self._note_durations[name]
                         else 0.0
                     ),
                 }
-                for name, counts in self._beat_counts.items()
+                for name, counts in self._note_counts.items()
             },
             "retries": self._retry_counts.copy(),
         }
@@ -451,9 +450,9 @@ class MetricsHooks(CadenceHooks):
     def reset(self) -> None:
         """Reset all metrics."""
         self._cadence_counts.clear()
-        self._beat_counts.clear()
+        self._note_counts.clear()
         self._cadence_durations.clear()
-        self._beat_durations.clear()
+        self._note_durations.clear()
         self._retry_counts.clear()
 
 
@@ -461,7 +460,7 @@ class TracingHooks(CadenceHooks):
     """
     Hooks for distributed tracing integration.
 
-    Creates spans for cadences and beats. Works with any tracing backend
+    Creates spans for cadences and notes. Works with any tracing backend
     that follows the OpenTelemetry-style API.
 
     Example:
@@ -470,7 +469,7 @@ class TracingHooks(CadenceHooks):
         tracer = trace.get_tracer("myapp")
         hooks = TracingHooks(tracer)
 
-        cadence = Cadence("checkout", ctx).with_hooks(hooks)
+        cadence = Cadence("checkout", score).with_hooks(hooks)
     """
 
     def __init__(self, tracer: Any) -> None:
@@ -482,16 +481,16 @@ class TracingHooks(CadenceHooks):
         """
         self._tracer = tracer
         self._cadence_span: Any | None = None
-        self._beat_spans: dict[str, Any] = {}
+        self._note_spans: dict[str, Any] = {}
 
-    async def before_cadence(self, cadence_name: str, context: ContextT) -> None:
+    async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
         self._cadence_span = self._tracer.start_span(f"cadence:{cadence_name}")
         self._cadence_span.set_attribute("cadence.name", cadence_name)
 
     async def after_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
@@ -505,24 +504,24 @@ class TracingHooks(CadenceHooks):
             self._cadence_span.end()
             self._cadence_span = None
 
-    async def before_beat(self, beat_name: str, context: ContextT) -> None:
+    async def before_note(self, note_name: str, score: ScoreT) -> None:
         span = self._tracer.start_span(
-            f"beat:{beat_name}",
+            f"note:{note_name}",
             parent=self._cadence_span,
         )
-        span.set_attribute("beat.name", beat_name)
-        self._beat_spans[beat_name] = span
+        span.set_attribute("note.name", note_name)
+        self._note_spans[note_name] = span
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
-        span = self._beat_spans.pop(beat_name, None)
+        span = self._note_spans.pop(note_name, None)
         if span:
-            span.set_attribute("beat.duration_ms", duration * 1000)
+            span.set_attribute("note.duration_ms", duration * 1000)
             if error:
                 span.set_status(
                     status_code=2,
@@ -536,33 +535,33 @@ class DebugHooks(CadenceHooks):
     """
     Hooks for debugging cadence execution.
 
-    Prints detailed information about each beat, including context changes.
+    Prints detailed information about each note, including score changes.
 
     Args:
-        show_context: Whether to print context after each beat
+        show_score: Whether to print score after each note
         show_timing: Whether to print timing info
     """
 
     def __init__(
         self,
-        show_context: bool = True,
+        show_score: bool = True,
         show_timing: bool = True,
     ) -> None:
-        self._show_context = show_context
+        self._show_score = show_score
         self._show_timing = show_timing
 
-    async def before_cadence(self, cadence_name: str, context: ContextT) -> None:
-        print(f"\n{'='*60}")
+    async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
+        print(f"\n{'=' * 60}")
         print(f"CADENCE: {cadence_name}")
-        print(f"{'='*60}")
-        if self._show_context:
-            print(f"Initial context: {context}")
+        print(f"{'=' * 60}")
+        if self._show_score:
+            print(f"Initial score: {score}")
         print()
 
     async def after_cadence(
         self,
         cadence_name: str,
-        context: ContextT,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
@@ -573,17 +572,17 @@ class DebugHooks(CadenceHooks):
             print("CADENCE COMPLETED")
         if self._show_timing:
             print(f"Duration: {duration:.3f}s")
-        if self._show_context:
-            print(f"Final context: {context}")
-        print(f"{'='*60}\n")
+        if self._show_score:
+            print(f"Final score: {score}")
+        print(f"{'=' * 60}\n")
 
-    async def before_beat(self, beat_name: str, context: ContextT) -> None:
-        print(f"→ {beat_name}")
+    async def before_note(self, note_name: str, score: ScoreT) -> None:
+        print(f"→ {note_name}")
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
-        context: ContextT,
+        note_name: str,
+        score: ScoreT,
         duration: float,
         error: Exception | None = None,
     ) -> None:
@@ -592,53 +591,56 @@ class DebugHooks(CadenceHooks):
         print(f"  {status}{timing}")
         if error:
             print(f"    Error: {error}")
-        if self._show_context:
-            print(f"    Context: {context}")
+        if self._show_score:
+            print(f"    Score: {score}")
 
 
 # --- Functional Hooks ---
 
 
-def before_beat(callback: Callable) -> CadenceHooks:
-    """Create a hooks instance with just a before_beat callback."""
+def before_note(callback: Callable[..., Any]) -> CadenceHooks:
+    """Create a hooks instance with just a before_note callback."""
+
     class CallbackHooks(CadenceHooks):
-        async def before_beat(self, beat_name: str, context: ContextT) -> None:
-            result = callback(beat_name, context)
+        async def before_note(self, note_name: str, score: ScoreT) -> None:
+            result = callback(note_name, score)
             if inspect.iscoroutine(result):
                 await result
 
     return CallbackHooks()
 
 
-def after_beat(callback: Callable) -> CadenceHooks:
-    """Create a hooks instance with just an after_beat callback."""
+def after_note(callback: Callable[..., Any]) -> CadenceHooks:
+    """Create a hooks instance with just an after_note callback."""
+
     class CallbackHooks(CadenceHooks):
-        async def after_beat(
+        async def after_note(
             self,
-            beat_name: str,
-            context: ContextT,
+            note_name: str,
+            score: ScoreT,
             duration: float,
             error: Exception | None = None,
         ) -> None:
-            result = callback(beat_name, context, duration, error)
+            result = callback(note_name, score, duration, error)
             if inspect.iscoroutine(result):
                 await result
 
     return CallbackHooks()
 
 
-def on_error(callback: Callable) -> CadenceHooks:
+def on_error(callback: Callable[..., Any]) -> CadenceHooks:
     """Create a hooks instance with just an on_error callback."""
+
     class CallbackHooks(CadenceHooks):
         async def on_error(
             self,
-            beat_name: str,
-            context: ContextT,
+            note_name: str,
+            score: ScoreT,
             error: Exception,
         ) -> bool | None:
-            result = callback(beat_name, context, error)
+            result = callback(note_name, score, error)
             if inspect.iscoroutine(result):
                 result = await result
-            return result
+            return bool(result) if result is not None else None
 
     return CallbackHooks()

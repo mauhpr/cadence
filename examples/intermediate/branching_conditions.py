@@ -12,7 +12,7 @@ import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
 
-from cadence import Cadence, Context, beat, retry, timeout
+from cadence import Cadence, Score, note, retry, timeout
 
 
 # --- Enums and Types ---
@@ -38,12 +38,12 @@ class CustomerTier(Enum):
     PLATINUM = "platinum"
 
 
-# --- Context Definitions ---
+# --- Score Definitions ---
 
 
 @dataclass
-class OrderContext(Context):
-    """Context for order processing with branching logic."""
+class OrderScore(Score):
+    """Score for order processing with branching logic."""
     order_id: str
     customer_id: str
     order_type: OrderType
@@ -66,54 +66,54 @@ class OrderContext(Context):
 # --- Condition Functions ---
 
 
-def is_high_value_order(ctx: OrderContext) -> bool:
+def is_high_value_order(score: OrderScore) -> bool:
     """Check if order exceeds high-value threshold."""
-    return ctx.amount > 1000
+    return score.amount > 1000
 
 
-def requires_fraud_check(ctx: OrderContext) -> bool:
+def requires_fraud_check(score: OrderScore) -> bool:
     """Check if order requires fraud verification."""
-    return ctx.amount > 500 or ctx.customer_tier == CustomerTier.BASIC
+    return score.amount > 500 or score.customer_tier == CustomerTier.BASIC
 
 
-def is_express_or_premium(ctx: OrderContext) -> bool:
+def is_express_or_premium(score: OrderScore) -> bool:
     """Check if order is express or premium type."""
-    return ctx.order_type in (OrderType.EXPRESS, OrderType.PREMIUM)
+    return score.order_type in (OrderType.EXPRESS, OrderType.PREMIUM)
 
 
-def is_crypto_payment(ctx: OrderContext) -> bool:
+def is_crypto_payment(score: OrderScore) -> bool:
     """Check if payment method is cryptocurrency."""
-    return ctx.payment_method == PaymentMethod.CRYPTO
+    return score.payment_method == PaymentMethod.CRYPTO
 
 
-def is_platinum_customer(ctx: OrderContext) -> bool:
+def is_platinum_customer(score: OrderScore) -> bool:
     """Check if customer is platinum tier."""
-    return ctx.customer_tier == CustomerTier.PLATINUM
+    return score.customer_tier == CustomerTier.PLATINUM
 
 
-def order_needs_review(ctx: OrderContext) -> bool:
+def order_needs_review(score: OrderScore) -> bool:
     """Check if order needs manual review."""
-    return ctx.requires_review
+    return score.requires_review
 
 
-# --- Beat Definitions ---
+# --- Note Definitions ---
 
 
-@beat
-async def validate_order(ctx: OrderContext) -> None:
+@note
+async def validate_order(score: OrderScore) -> None:
     """Validate the order details."""
     await asyncio.sleep(0.01)
-    print(f"  Validating order {ctx.order_id}...")
+    print(f"  Validating order {score.order_id}...")
 
     # Set requires_review flag based on business rules
-    if ctx.amount > 5000:
-        ctx.requires_review = True
-    if ctx.fraud_score > 0.7:
-        ctx.requires_review = True
+    if score.amount > 5000:
+        score.requires_review = True
+    if score.fraud_score > 0.7:
+        score.requires_review = True
 
 
-@beat
-async def calculate_standard_discount(ctx: OrderContext) -> None:
+@note
+async def calculate_standard_discount(score: OrderScore) -> None:
     """Calculate discount for standard customers."""
     await asyncio.sleep(0.01)
     # Basic tier customers get no discount
@@ -124,148 +124,148 @@ async def calculate_standard_discount(ctx: OrderContext) -> None:
         CustomerTier.GOLD: 0.10,
         CustomerTier.PLATINUM: 0.15,  # Should use premium path
     }
-    ctx.discount_applied = ctx.amount * discounts.get(ctx.customer_tier, 0)
-    ctx.final_amount = ctx.amount - ctx.discount_applied
-    print(f"  Standard discount: ${ctx.discount_applied:.2f}")
+    score.discount_applied = score.amount * discounts.get(score.customer_tier, 0)
+    score.final_amount = score.amount - score.discount_applied
+    print(f"  Standard discount: ${score.discount_applied:.2f}")
 
 
-@beat
-async def calculate_premium_discount(ctx: OrderContext) -> None:
+@note
+async def calculate_premium_discount(score: OrderScore) -> None:
     """Calculate enhanced discount for platinum customers."""
     await asyncio.sleep(0.01)
     # Platinum customers get 15% + additional bonuses
-    base_discount = ctx.amount * 0.15
+    base_discount = score.amount * 0.15
 
     # Extra discount for high-value orders
-    if ctx.amount > 1000:
-        base_discount += ctx.amount * 0.05
+    if score.amount > 1000:
+        base_discount += score.amount * 0.05
 
-    ctx.discount_applied = base_discount
-    ctx.final_amount = ctx.amount - ctx.discount_applied
-    print(f"  Premium discount: ${ctx.discount_applied:.2f} (Platinum bonus!)")
+    score.discount_applied = base_discount
+    score.final_amount = score.amount - score.discount_applied
+    print(f"  Premium discount: ${score.discount_applied:.2f} (Platinum bonus!)")
 
 
-@beat
-async def set_standard_shipping(ctx: OrderContext) -> None:
+@note
+async def set_standard_shipping(score: OrderScore) -> None:
     """Set standard shipping (5-7 days)."""
     await asyncio.sleep(0.01)
-    ctx.shipping_method = "Standard Ground"
-    ctx.estimated_days = 7
-    print(f"  Shipping: {ctx.shipping_method} ({ctx.estimated_days} days)")
+    score.shipping_method = "Standard Ground"
+    score.estimated_days = 7
+    print(f"  Shipping: {score.shipping_method} ({score.estimated_days} days)")
 
 
-@beat
-async def set_express_shipping(ctx: OrderContext) -> None:
+@note
+async def set_express_shipping(score: OrderScore) -> None:
     """Set express shipping (2-3 days)."""
     await asyncio.sleep(0.01)
-    ctx.shipping_method = "Express Air"
-    ctx.estimated_days = 2
-    print(f"  Shipping: {ctx.shipping_method} ({ctx.estimated_days} days)")
+    score.shipping_method = "Express Air"
+    score.estimated_days = 2
+    print(f"  Shipping: {score.shipping_method} ({score.estimated_days} days)")
 
 
-@beat
-async def set_premium_shipping(ctx: OrderContext) -> None:
+@note
+async def set_premium_shipping(score: OrderScore) -> None:
     """Set premium shipping (next day)."""
     await asyncio.sleep(0.01)
-    ctx.shipping_method = "Premium Next-Day"
-    ctx.estimated_days = 1
-    print(f"  Shipping: {ctx.shipping_method} ({ctx.estimated_days} days)")
+    score.shipping_method = "Premium Next-Day"
+    score.estimated_days = 1
+    print(f"  Shipping: {score.shipping_method} ({score.estimated_days} days)")
 
 
-@beat
+@note
 @retry(max_attempts=3)
 @timeout(2.0)
-async def process_credit_card(ctx: OrderContext) -> None:
+async def process_credit_card(score: OrderScore) -> None:
     """Process credit card payment."""
     await asyncio.sleep(0.05)
-    print(f"  Processing credit card payment: ${ctx.final_amount:.2f}")
-    ctx.payment_processed = True
+    print(f"  Processing credit card payment: ${score.final_amount:.2f}")
+    score.payment_processed = True
 
 
-@beat
+@note
 @retry(max_attempts=3)
 @timeout(5.0)
-async def process_paypal(ctx: OrderContext) -> None:
+async def process_paypal(score: OrderScore) -> None:
     """Process PayPal payment."""
     await asyncio.sleep(0.08)
-    print(f"  Processing PayPal payment: ${ctx.final_amount:.2f}")
-    ctx.payment_processed = True
+    print(f"  Processing PayPal payment: ${score.final_amount:.2f}")
+    score.payment_processed = True
 
 
-@beat
+@note
 @timeout(10.0)
-async def process_bank_transfer(ctx: OrderContext) -> None:
+async def process_bank_transfer(score: OrderScore) -> None:
     """Process bank transfer (takes longer)."""
     await asyncio.sleep(0.1)
-    print(f"  Processing bank transfer: ${ctx.final_amount:.2f}")
-    ctx.payment_processed = True
+    print(f"  Processing bank transfer: ${score.final_amount:.2f}")
+    score.payment_processed = True
 
 
-@beat
+@note
 @retry(max_attempts=5)
 @timeout(30.0)
-async def process_crypto(ctx: OrderContext) -> None:
+async def process_crypto(score: OrderScore) -> None:
     """Process cryptocurrency payment (may take time for confirmations)."""
     await asyncio.sleep(0.15)
-    print(f"  Processing crypto payment: ${ctx.final_amount:.2f}")
+    print(f"  Processing crypto payment: ${score.final_amount:.2f}")
     print("    Waiting for blockchain confirmations...")
-    ctx.payment_processed = True
+    score.payment_processed = True
 
 
-@beat
-async def perform_fraud_check(ctx: OrderContext) -> None:
+@note
+async def perform_fraud_check(score: OrderScore) -> None:
     """Perform fraud analysis on the order."""
     await asyncio.sleep(0.03)
     # Simulate fraud score calculation
     import random
-    ctx.fraud_score = random.uniform(0.0, 0.5)  # Keep it low for demo
-    print(f"  Fraud check: score = {ctx.fraud_score:.2f}")
+    score.fraud_score = random.uniform(0.0, 0.5)  # Keep it low for demo
+    print(f"  Fraud check: score = {score.fraud_score:.2f}")
 
 
-@beat
-async def skip_fraud_check(ctx: OrderContext) -> None:
+@note
+async def skip_fraud_check(score: OrderScore) -> None:
     """Skip fraud check for trusted customers."""
-    ctx.fraud_score = 0.0
+    score.fraud_score = 0.0
     print("  Fraud check: skipped (trusted customer)")
 
 
-@beat
-async def flag_for_manual_review(ctx: OrderContext) -> None:
+@note
+async def flag_for_manual_review(score: OrderScore) -> None:
     """Flag order for manual review."""
     await asyncio.sleep(0.01)
     print("  ⚠ Order flagged for manual review")
-    ctx.notifications_sent.append("review_team_notified")
+    score.notifications_sent.append("review_team_notified")
 
 
-@beat
-async def auto_approve(ctx: OrderContext) -> None:
+@note
+async def auto_approve(score: OrderScore) -> None:
     """Auto-approve the order."""
     await asyncio.sleep(0.01)
     print("  ✓ Order auto-approved")
 
 
-@beat
-async def send_confirmation(ctx: OrderContext) -> None:
+@note
+async def send_confirmation(score: OrderScore) -> None:
     """Send order confirmation."""
     await asyncio.sleep(0.01)
-    print(f"  Confirmation sent for order {ctx.order_id}")
-    ctx.notifications_sent.append("confirmation_email")
+    print(f"  Confirmation sent for order {score.order_id}")
+    score.notifications_sent.append("confirmation_email")
 
 
-@beat
-async def send_premium_confirmation(ctx: OrderContext) -> None:
+@note
+async def send_premium_confirmation(score: OrderScore) -> None:
     """Send premium confirmation with concierge contact."""
     await asyncio.sleep(0.01)
-    print(f"  Premium confirmation sent for order {ctx.order_id}")
+    print(f"  Premium confirmation sent for order {score.order_id}")
     print("    Includes: Concierge contact + tracking link")
-    ctx.notifications_sent.append("premium_confirmation_email")
-    ctx.notifications_sent.append("sms_notification")
+    score.notifications_sent.append("premium_confirmation_email")
+    score.notifications_sent.append("sms_notification")
 
 
 # --- Cadence Builders ---
 
 
-def create_order_processing_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
+def create_order_processing_cadence(score: OrderScore) -> Cadence[OrderScore]:
     """
     Create a complete order processing cadence with multiple branches.
 
@@ -279,7 +279,7 @@ def create_order_processing_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
     7. Branch: Confirmation (standard vs premium)
     """
     # Determine shipping beat based on order type
-    def get_shipping_beat(c: OrderContext):
+    def get_shipping_beat(c: OrderScore):
         if c.order_type == OrderType.PREMIUM:
             return set_premium_shipping
         elif c.order_type == OrderType.EXPRESS:
@@ -294,10 +294,10 @@ def create_order_processing_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
         PaymentMethod.BANK_TRANSFER: process_bank_transfer,
         PaymentMethod.CRYPTO: process_crypto,
     }
-    payment_beat = payment_beats.get(ctx.payment_method, process_credit_card)
+    payment_beat = payment_beats.get(score.payment_method, process_credit_card)
 
     return (
-        Cadence("order_processing", ctx)
+        Cadence("order_processing", score)
         # Beat 1: Validate
         .then("validate", validate_order)
 
@@ -318,7 +318,7 @@ def create_order_processing_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
         )
 
         # Beat 4: Shipping selection (using dynamic beat selection)
-        .then("shipping", get_shipping_beat(ctx))
+        .then("shipping", get_shipping_beat(score))
 
         # Beat 5: Payment processing
         .then("payment", payment_beat)
@@ -352,7 +352,7 @@ async def demo_standard_order():
     print("DEMO 1: Standard Order (Basic Customer)")
     print("=" * 60 + "\n")
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-001",
         customer_id="CUST-100",
         order_type=OrderType.STANDARD,
@@ -362,7 +362,7 @@ async def demo_standard_order():
         items=[{"name": "Widget", "qty": 2}],
     )
 
-    cadence = create_order_processing_cadence(ctx)
+    cadence = create_order_processing_cadence(score)
     result = await cadence.run()
 
     print(f"\n  Summary:")
@@ -378,7 +378,7 @@ async def demo_express_gold_order():
     print("DEMO 2: Express Order (Gold Customer)")
     print("=" * 60 + "\n")
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-002",
         customer_id="CUST-200",
         order_type=OrderType.EXPRESS,
@@ -388,7 +388,7 @@ async def demo_express_gold_order():
         items=[{"name": "Premium Widget", "qty": 5}],
     )
 
-    cadence = create_order_processing_cadence(ctx)
+    cadence = create_order_processing_cadence(score)
     result = await cadence.run()
 
     print(f"\n  Summary:")
@@ -404,7 +404,7 @@ async def demo_premium_platinum_order():
     print("DEMO 3: Premium Order (Platinum Customer, Crypto)")
     print("=" * 60 + "\n")
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-003",
         customer_id="CUST-300",
         order_type=OrderType.PREMIUM,
@@ -414,7 +414,7 @@ async def demo_premium_platinum_order():
         items=[{"name": "Luxury Widget Pro", "qty": 10}],
     )
 
-    cadence = create_order_processing_cadence(ctx)
+    cadence = create_order_processing_cadence(score)
     result = await cadence.run()
 
     print(f"\n  Summary:")
@@ -431,7 +431,7 @@ async def demo_high_value_review():
     print("DEMO 4: High-Value Order (Requires Review)")
     print("=" * 60 + "\n")
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-004",
         customer_id="CUST-400",
         order_type=OrderType.STANDARD,
@@ -441,7 +441,7 @@ async def demo_high_value_review():
         items=[{"name": "Enterprise Widget Suite", "qty": 1}],
     )
 
-    cadence = create_order_processing_cadence(ctx)
+    cadence = create_order_processing_cadence(score)
     result = await cadence.run()
 
     print(f"\n  Summary:")

@@ -1,12 +1,12 @@
-"""Tests for Context, Atomic wrappers, and copy-on-write merge."""
+"""Tests for Score, Atomic wrappers, and copy-on-write merge."""
 
 import pytest
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 from cadence import (
-    Context,
-    ImmutableContext,
+    Score,
+    ImmutableScore,
     Atomic,
     AtomicList,
     AtomicDict,
@@ -17,32 +17,32 @@ from cadence import (
 
 
 @dataclass
-class SampleContext(Context):
-    """Test context for copy-on-write tests."""
+class SampleScore(Score):
+    """Test score for copy-on-write tests."""
     name: str = ""
     count: int = 0
     items: Optional[List[str]] = None
     metadata: Optional[dict] = None
 
 
-class TestContext:
-    """Test basic Context functionality."""
+class TestScore:
+    """Test basic Score functionality."""
 
-    def test_context_initialization(self):
-        """Test that Context initializes properly with dataclass."""
-        ctx = SampleContext(name="test", count=5)
-        ctx.__post_init__()
-        assert ctx.name == "test"
-        assert ctx.count == 5
+    def test_score_initialization(self):
+        """Test that Score initializes properly with dataclass."""
+        score = SampleScore(name="test", count=5)
+        score.__post_init__()
+        assert score.name == "test"
+        assert score.count == 5
 
-    def test_context_mutation(self):
-        """Test that Context allows mutation."""
-        ctx = SampleContext()
-        ctx.__post_init__()
-        ctx.name = "updated"
-        ctx.count = 10
-        assert ctx.name == "updated"
-        assert ctx.count == 10
+    def test_score_mutation(self):
+        """Test that Score allows mutation."""
+        score = SampleScore()
+        score.__post_init__()
+        score.name = "updated"
+        score.count = 10
+        assert score.name == "updated"
+        assert score.count == 10
 
 
 class TestCopyOnWrite:
@@ -50,23 +50,23 @@ class TestCopyOnWrite:
 
     def test_snapshot_creates_copy(self):
         """Test that _snapshot creates an independent copy."""
-        ctx = SampleContext(name="original", count=1)
-        ctx.__post_init__()
+        score = SampleScore(name="original", count=1)
+        score.__post_init__()
 
-        snapshot = ctx._snapshot()
+        snapshot = score._snapshot()
         snapshot.name = "modified"
         snapshot.count = 99
 
         # Original should be unchanged
-        assert ctx.name == "original"
-        assert ctx.count == 1
+        assert score.name == "original"
+        assert score.count == 1
 
     def test_get_changes_detects_modifications(self):
         """Test that _get_changes detects modified fields."""
-        ctx = SampleContext(name="original", count=1)
-        ctx.__post_init__()
+        score = SampleScore(name="original", count=1)
+        score.__post_init__()
 
-        snapshot = ctx._snapshot()
+        snapshot = score._snapshot()
         snapshot.name = "modified"
 
         changes = snapshot._get_changes()
@@ -76,34 +76,34 @@ class TestCopyOnWrite:
 
     def test_merge_non_conflicting_changes(self):
         """Test merging snapshots with different fields modified."""
-        ctx = SampleContext(name="original")
-        ctx.__post_init__()
+        score = SampleScore(name="original")
+        score.__post_init__()
 
         # Two snapshots modify different fields
-        snap1 = ctx._snapshot()
+        snap1 = score._snapshot()
         snap1.name = "task1"
 
-        snap2 = ctx._snapshot()
+        snap2 = score._snapshot()
         snap2.count = 42
 
-        merge_snapshots(ctx, [snap1, snap2])
+        merge_snapshots(score, [snap1, snap2])
 
-        assert ctx.name == "task1"
-        assert ctx.count == 42
+        assert score.name == "task1"
+        assert score.count == 42
 
     def test_merge_conflict_detection(self):
         """Test that conflicting modifications raise MergeConflict."""
-        ctx = SampleContext()
-        ctx.__post_init__()
+        score = SampleScore()
+        score.__post_init__()
 
-        snap1 = ctx._snapshot()
+        snap1 = score._snapshot()
         snap1.name = "value1"
 
-        snap2 = ctx._snapshot()
+        snap2 = score._snapshot()
         snap2.name = "value2"
 
         with pytest.raises(MergeConflict) as exc_info:
-            merge_snapshots(ctx, [snap1, snap2])
+            merge_snapshots(score, [snap1, snap2])
 
         assert exc_info.value.field == "name"
         assert "value1" in exc_info.value.values
@@ -111,60 +111,60 @@ class TestCopyOnWrite:
 
     def test_merge_same_value_no_conflict(self):
         """Test that same value written by multiple tasks doesn't conflict."""
-        ctx = SampleContext()
-        ctx.__post_init__()
+        score = SampleScore()
+        score.__post_init__()
 
-        snap1 = ctx._snapshot()
+        snap1 = score._snapshot()
         snap1.name = "same_value"
 
-        snap2 = ctx._snapshot()
+        snap2 = score._snapshot()
         snap2.name = "same_value"
 
         # Should not raise
-        merge_snapshots(ctx, [snap1, snap2])
-        assert ctx.name == "same_value"
+        merge_snapshots(score, [snap1, snap2])
+        assert score.name == "same_value"
 
     def test_last_write_wins_strategy(self):
         """Test last_write_wins merge strategy."""
-        ctx = SampleContext()
-        ctx.__post_init__()
+        score = SampleScore()
+        score.__post_init__()
 
-        snap1 = ctx._snapshot()
+        snap1 = score._snapshot()
         snap1.name = "first"
 
-        snap2 = ctx._snapshot()
+        snap2 = score._snapshot()
         snap2.name = "second"
 
-        merge_snapshots(ctx, [snap1, snap2], MergeStrategy.last_write_wins)
-        assert ctx.name == "second"
+        merge_snapshots(score, [snap1, snap2], MergeStrategy.last_write_wins)
+        assert score.name == "second"
 
     def test_smart_merge_lists(self):
         """Test smart_merge extends lists."""
-        ctx = SampleContext()
-        ctx.__post_init__()
+        score = SampleScore()
+        score.__post_init__()
 
-        snap1 = ctx._snapshot()
+        snap1 = score._snapshot()
         snap1.items = ["a", "b"]
 
-        snap2 = ctx._snapshot()
+        snap2 = score._snapshot()
         snap2.items = ["c", "d"]
 
-        merge_snapshots(ctx, [snap1, snap2], MergeStrategy.smart_merge)
-        assert ctx.items == ["a", "b", "c", "d"]
+        merge_snapshots(score, [snap1, snap2], MergeStrategy.smart_merge)
+        assert score.items == ["a", "b", "c", "d"]
 
     def test_smart_merge_dicts(self):
         """Test smart_merge merges dicts."""
-        ctx = SampleContext()
-        ctx.__post_init__()
+        score = SampleScore()
+        score.__post_init__()
 
-        snap1 = ctx._snapshot()
+        snap1 = score._snapshot()
         snap1.metadata = {"key1": "value1"}
 
-        snap2 = ctx._snapshot()
+        snap2 = score._snapshot()
         snap2.metadata = {"key2": "value2"}
 
-        merge_snapshots(ctx, [snap1, snap2], MergeStrategy.smart_merge)
-        assert ctx.metadata == {"key1": "value1", "key2": "value2"}
+        merge_snapshots(score, [snap1, snap2], MergeStrategy.smart_merge)
+        assert score.metadata == {"key1": "value1", "key2": "value2"}
 
 
 class TestAtomic:
@@ -261,13 +261,13 @@ class TestAtomicDict:
         assert "missing" not in cache
 
 
-class TestImmutableContext:
-    """Test ImmutableContext for functional-style cadences."""
+class TestImmutableScore:
+    """Test ImmutableScore for functional-style cadences."""
 
     def test_immutable_context_replace(self):
         """Test replace creates new instance."""
         @dataclass(frozen=True)
-        class Counter(ImmutableContext):
+        class Counter(ImmutableScore):
             value: int = 0
 
         c1 = Counter(value=5)
@@ -280,7 +280,7 @@ class TestImmutableContext:
     def test_immutable_context_with_field(self):
         """Test with_field helper."""
         @dataclass(frozen=True)
-        class Data(ImmutableContext):
+        class Data(ImmutableScore):
             name: str = ""
             count: int = 0
 

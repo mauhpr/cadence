@@ -1,22 +1,22 @@
-"""Base node interface."""
+"""Base measure interface."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
-ContextT = TypeVar("ContextT")
+ScoreT = TypeVar("ScoreT")
 
 
-class Node(ABC, Generic[ContextT]):
+class Measure(ABC, Generic[ScoreT]):
     """
-    Abstract base class for all cadence nodes.
+    Abstract base class for all cadence measures.
 
-    Each node represents an execution unit in the cadence.
+    Each measure represents an execution unit in the cadence.
     """
 
-    def __init__(self, context: ContextT, name: str) -> None:
-        self._context = context
+    def __init__(self, score: ScoreT, name: str) -> None:
+        self._score = score
         self._name = name
 
     @property
@@ -24,13 +24,13 @@ class Node(ABC, Generic[ContextT]):
         return self._name
 
     @property
-    def context(self) -> ContextT:
-        return self._context
+    def score(self) -> ScoreT:
+        return self._score
 
     @abstractmethod
     async def execute(self) -> bool | None:
         """
-        Execute this node.
+        Execute this measure.
 
         Returns:
             None for normal completion

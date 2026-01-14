@@ -12,7 +12,7 @@ This example demonstrates Cadence's diagram generation capabilities:
 import asyncio
 from dataclasses import dataclass, field
 
-from cadence import Cadence, Context, beat
+from cadence import Cadence, Score, note
 from cadence.diagram import (
     to_mermaid,
     to_dot,
@@ -21,12 +21,12 @@ from cadence.diagram import (
 )
 
 
-# --- Context Definitions ---
+# --- Score Definitions ---
 
 
 @dataclass
-class OrderContext(Context):
-    """Context for order processing cadence."""
+class OrderScore(Score):
+    """Score for order processing cadence."""
     order_id: str
     customer_id: str
     is_premium: bool = False
@@ -38,79 +38,79 @@ class OrderContext(Context):
 
 
 @dataclass
-class PaymentContext(Context):
-    """Context for payment processing sub-cadence."""
+class PaymentScore(Score):
+    """Score for payment processing sub-cadence."""
     amount: float = 0.0
     method: str = "credit_card"
     processed: bool = False
     transaction_id: str = ""
 
 
-# --- Beat Definitions ---
+# --- Note Definitions ---
 
 
-@beat
-async def validate_order(ctx: OrderContext) -> None:
+@note
+async def validate_order(score: OrderScore) -> None:
     """Validate the order details."""
     await asyncio.sleep(0.01)
-    print(f"  Validating order {ctx.order_id}")
+    print(f"  Validating order {score.order_id}")
 
 
-@beat
-async def fetch_customer(ctx: OrderContext) -> None:
+@note
+async def fetch_customer(score: OrderScore) -> None:
     """Fetch customer information."""
     await asyncio.sleep(0.01)
-    print(f"  Fetching customer {ctx.customer_id}")
+    print(f"  Fetching customer {score.customer_id}")
 
 
-@beat
-async def fetch_inventory(ctx: OrderContext) -> None:
+@note
+async def fetch_inventory(score: OrderScore) -> None:
     """Check inventory availability."""
     await asyncio.sleep(0.01)
     print("  Checking inventory")
 
 
-@beat
-async def calculate_shipping(ctx: OrderContext) -> None:
+@note
+async def calculate_shipping(score: OrderScore) -> None:
     """Calculate shipping costs."""
     await asyncio.sleep(0.01)
-    ctx.shipping_cost = 9.99 if not ctx.is_premium else 0.0
-    print(f"  Shipping: ${ctx.shipping_cost}")
+    score.shipping_cost = 9.99 if not score.is_premium else 0.0
+    print(f"  Shipping: ${score.shipping_cost}")
 
 
-@beat
-async def apply_premium_discount(ctx: OrderContext) -> None:
+@note
+async def apply_premium_discount(score: OrderScore) -> None:
     """Apply premium customer discount."""
     await asyncio.sleep(0.01)
-    ctx.discount = ctx.total * 0.15
-    print(f"  Premium discount: ${ctx.discount:.2f}")
+    score.discount = score.total * 0.15
+    print(f"  Premium discount: ${score.discount:.2f}")
 
 
-@beat
-async def apply_standard_pricing(ctx: OrderContext) -> None:
+@note
+async def apply_standard_pricing(score: OrderScore) -> None:
     """Apply standard pricing (no discount)."""
     await asyncio.sleep(0.01)
-    ctx.discount = 0.0
+    score.discount = 0.0
     print("  Standard pricing applied")
 
 
-@beat
-async def process_payment(ctx: OrderContext) -> None:
+@note
+async def process_payment(score: OrderScore) -> None:
     """Process the payment."""
     await asyncio.sleep(0.01)
     print("  Processing payment")
 
 
-@beat
-async def send_confirmation(ctx: OrderContext) -> None:
+@note
+async def send_confirmation(score: OrderScore) -> None:
     """Send order confirmation."""
     await asyncio.sleep(0.01)
-    ctx.status = "confirmed"
-    print(f"  Order {ctx.order_id} confirmed!")
+    score.status = "confirmed"
+    print(f"  Order {score.order_id} confirmed!")
 
 
-@beat
-async def update_analytics(ctx: OrderContext) -> None:
+@note
+async def update_analytics(score: OrderScore) -> None:
     """Update analytics."""
     await asyncio.sleep(0.01)
     print("  Analytics updated")
@@ -119,28 +119,28 @@ async def update_analytics(ctx: OrderContext) -> None:
 # --- Condition Functions ---
 
 
-def is_premium_customer(ctx: OrderContext) -> bool:
+def is_premium_customer(score: OrderScore) -> bool:
     """Check if customer is premium."""
-    return ctx.is_premium
+    return score.is_premium
 
 
 # --- Cadence Builders ---
 
 
-def create_simple_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
+def create_simple_cadence(score: OrderScore) -> Cadence[OrderScore]:
     """Create a simple sequential cadence for basic diagram demo."""
     return (
-        Cadence("simple_checkout", ctx)
+        Cadence("simple_checkout", score)
         .then("validate", validate_order)
         .then("process_payment", process_payment)
         .then("confirm", send_confirmation)
     )
 
 
-def create_parallel_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
+def create_parallel_cadence(score: OrderScore) -> Cadence[OrderScore]:
     """Create a cadence with parallel execution for diagram demo."""
     return (
-        Cadence("parallel_checkout", ctx)
+        Cadence("parallel_checkout", score)
         .then("validate", validate_order)
         .sync("fetch_data", [
             fetch_customer,
@@ -152,10 +152,10 @@ def create_parallel_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
     )
 
 
-def create_branching_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
+def create_branching_cadence(score: OrderScore) -> Cadence[OrderScore]:
     """Create a cadence with branching for diagram demo."""
     return (
-        Cadence("branching_checkout", ctx)
+        Cadence("branching_checkout", score)
         .then("validate", validate_order)
         .split(
             "pricing",
@@ -168,10 +168,10 @@ def create_branching_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
     )
 
 
-def create_complex_cadence(ctx: OrderContext) -> Cadence[OrderContext]:
+def create_complex_cadence(score: OrderScore) -> Cadence[OrderScore]:
     """Create a complex cadence combining all patterns."""
     return (
-        Cadence("complex_checkout", ctx)
+        Cadence("complex_checkout", score)
         # Initial validation
         .then("validate", validate_order)
         # Parallel data fetching
@@ -208,22 +208,22 @@ def demo_text_visualization():
     print("=" * 60)
     print("\nUsing print_cadence() for quick debugging:\n")
 
-    ctx = OrderContext(order_id="ORD-001", customer_id="CUST-100")
+    score = OrderScore(order_id="ORD-001", customer_id="CUST-100")
 
     print("--- Simple Cadence ---")
-    simple = create_simple_cadence(ctx)
+    simple = create_simple_cadence(score)
     print_cadence(simple)
 
     print("--- Parallel Cadence ---")
-    parallel = create_parallel_cadence(ctx)
+    parallel = create_parallel_cadence(score)
     print_cadence(parallel)
 
     print("--- Branching Cadence ---")
-    branching = create_branching_cadence(ctx)
+    branching = create_branching_cadence(score)
     print_cadence(branching)
 
     print("--- Complex Cadence ---")
-    complex_cadence = create_complex_cadence(ctx)
+    complex_cadence = create_complex_cadence(score)
     print_cadence(complex_cadence)
 
 
@@ -233,7 +233,7 @@ def demo_mermaid_generation():
     print("DEMO 2: Mermaid Diagram Generation")
     print("=" * 60)
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-001",
         customer_id="CUST-100",
         is_premium=True,
@@ -241,19 +241,19 @@ def demo_mermaid_generation():
 
     # Simple cadence
     print("\n--- Simple Cadence (Top-Down) ---\n")
-    simple = create_simple_cadence(ctx)
+    simple = create_simple_cadence(score)
     mermaid = to_mermaid(simple)
     print(mermaid)
 
     # Parallel cadence with left-right direction
     print("\n--- Parallel Cadence (Left-Right) ---\n")
-    parallel = create_parallel_cadence(ctx)
+    parallel = create_parallel_cadence(score)
     mermaid = to_mermaid(parallel, direction="LR")
     print(mermaid)
 
     # Complex cadence with theme
     print("\n--- Complex Cadence (with dark theme) ---\n")
-    complex_cadence = create_complex_cadence(ctx)
+    complex_cadence = create_complex_cadence(score)
     mermaid = to_mermaid(complex_cadence, theme="dark")
     print(mermaid)
 
@@ -268,17 +268,17 @@ def demo_dot_generation():
     print("DEMO 3: DOT (Graphviz) Diagram Generation")
     print("=" * 60)
 
-    ctx = OrderContext(order_id="ORD-001", customer_id="CUST-100")
+    score = OrderScore(order_id="ORD-001", customer_id="CUST-100")
 
     # Simple cadence
     print("\n--- Simple Cadence ---\n")
-    simple = create_simple_cadence(ctx)
+    simple = create_simple_cadence(score)
     dot = to_dot(simple)
     print(dot)
 
     # Custom colors
     print("\n--- Complex Cadence (Custom Colors) ---\n")
-    complex_cadence = create_complex_cadence(ctx)
+    complex_cadence = create_complex_cadence(score)
     dot = to_dot(
         complex_cadence,
         rankdir="LR",  # Left to right
@@ -298,8 +298,8 @@ def demo_save_diagrams():
     print("DEMO 4: Saving Diagrams to Files")
     print("=" * 60)
 
-    ctx = OrderContext(order_id="ORD-001", customer_id="CUST-100")
-    cadence = create_complex_cadence(ctx)
+    score = OrderScore(order_id="ORD-001", customer_id="CUST-100")
+    cadence = create_complex_cadence(score)
 
     print("\n  Saving diagrams to /tmp/ directory...\n")
 
@@ -346,8 +346,8 @@ def demo_documentation_workflow():
     print("DEMO 5: Documentation Workflow")
     print("=" * 60)
 
-    ctx = OrderContext(order_id="ORD-001", customer_id="CUST-100")
-    cadence = create_complex_cadence(ctx)
+    score = OrderScore(order_id="ORD-001", customer_id="CUST-100")
+    cadence = create_complex_cadence(score)
 
     print("\n  Generating Markdown documentation with embedded diagram...\n")
 
@@ -367,7 +367,7 @@ This document describes the checkout cadence for the e-commerce system.
 {mermaid}
 ```
 
-## Cadence Beats
+## Cadence Notes
 
 1. **Validate Order** - Ensures order data is valid
 2. **Enrich Data** (Parallel)
@@ -385,7 +385,7 @@ This document describes the checkout cadence for the e-commerce system.
 ## Notes
 
 - Premium customers get free shipping
-- All beats are retryable on transient failures
+- All notes are retryable on transient failures
 """
 
     print(doc)

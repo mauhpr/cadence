@@ -1,4 +1,4 @@
-"""Parallel execution node with copy-on-write context isolation."""
+"""Parallel execution measure with copy-on-write score isolation."""
 
 from __future__ import annotations
 
@@ -6,31 +6,31 @@ import asyncio
 import inspect
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
-from cadence.nodes.base import Node
-from cadence.state import Context, MergeStrategy, merge_snapshots
-from cadence.step import Beat
+from cadence.nodes.base import Measure
+from cadence.note import Note
+from cadence.score import MergeStrategy, Score, merge_snapshots
 
-ContextT = TypeVar("ContextT")
+ScoreT = TypeVar("ScoreT")
 
 
 def _is_async_callable(obj: Any) -> bool:
-    """Check if an object is an async callable (function, method, or Beat)."""
-    if isinstance(obj, Beat):
+    """Check if an object is an async callable (function, method, or Note)."""
+    if isinstance(obj, Note):
         return obj.is_async
     if inspect.iscoroutinefunction(obj):
         return True
-    if hasattr(obj, "__call__"):
+    if callable(obj):
         return inspect.iscoroutinefunction(obj.__call__)
     return False
 
 
-class ParallelNode(Node[ContextT]):
+class ParallelMeasure(Measure[ScoreT]):
     """
-    Executes multiple tasks in parallel with copy-on-write context isolation.
+    Executes multiple tasks in parallel with copy-on-write score isolation.
 
-    Each task receives an isolated snapshot of the context to prevent race
+    Each task receives an isolated snapshot of the score to prevent race
     conditions. After all tasks complete, changes are merged back using
     a configurable merge strategy.
 
@@ -45,22 +45,22 @@ class ParallelNode(Node[ContextT]):
 
     def __init__(
         self,
-        context: ContextT,
+        score: ScoreT,
         name: str,
-        tasks: list[Callable[[ContextT], Any]],
-        merge_strategy: Callable = MergeStrategy.fail_on_conflict,
+        tasks: list[Callable[[ScoreT], Any]],
+        merge_strategy: Callable[..., Any] = MergeStrategy.fail_on_conflict,
     ) -> None:
-        super().__init__(context, name)
+        super().__init__(score, name)
         self._tasks = tasks
         self._merge_strategy = merge_strategy
 
     async def execute(self) -> bool | None:
-        """Execute all tasks in parallel with isolated context snapshots."""
+        """Execute all tasks in parallel with isolated score snapshots."""
         if not self._tasks:
             return None
 
-        # Check if context supports copy-on-write
-        use_cow = isinstance(self._context, Context) and hasattr(self._context, "_snapshot")
+        # Check if score supports copy-on-write
+        use_cow = isinstance(self._score, Score) and hasattr(self._score, "_snapshot")
 
         if use_cow:
             return await self._execute_with_cow()
@@ -68,17 +68,18 @@ class ParallelNode(Node[ContextT]):
             return await self._execute_direct()
 
     async def _execute_with_cow(self) -> bool | None:
-        """Execute with copy-on-write context isolation."""
+        """Execute with copy-on-write score isolation."""
         # Create isolated snapshots for each task
-        snapshots = [self._context._snapshot() for _ in self._tasks]
+        score_as_score = cast(Score, self._score)
+        snapshots: list[Any] = [score_as_score._snapshot() for _ in self._tasks]
 
         # Separate async and sync tasks with their snapshots
-        async_tasks = []
-        async_snapshots = []
-        sync_tasks = []
-        sync_snapshots = []
+        async_tasks: list[Callable[..., Any]] = []
+        async_snapshots: list[Any] = []
+        sync_tasks: list[Callable[..., Any]] = []
+        sync_snapshots: list[Any] = []
 
-        for task, snapshot in zip(self._tasks, snapshots):
+        for task, snapshot in zip(self._tasks, snapshots, strict=True):
             if _is_async_callable(task):
                 async_tasks.append(task)
                 async_snapshots.append(snapshot)
@@ -87,7 +88,9 @@ class ParallelNode(Node[ContextT]):
                 sync_snapshots.append(snapshot)
 
         # Create coroutines for async tasks
-        async_coros = [task(snapshot) for task, snapshot in zip(async_tasks, async_snapshots)]
+        async_coros = [
+            task(snapshot) for task, snapshot in zip(async_tasks, async_snapshots, strict=True)
+        ]
 
         # Run sync tasks in thread pool
         if sync_tasks:
@@ -95,21 +98,21 @@ class ParallelNode(Node[ContextT]):
             with ThreadPoolExecutor(max_workers=len(sync_tasks)) as executor:
                 sync_futures = [
                     loop.run_in_executor(executor, task, snapshot)
-                    for task, snapshot in zip(sync_tasks, sync_snapshots)
+                    for task, snapshot in zip(sync_tasks, sync_snapshots, strict=True)
                 ]
                 # Wait for all tasks concurrently
                 await asyncio.gather(*async_coros, *sync_futures)
         elif async_coros:
             await asyncio.gather(*async_coros)
 
-        # Merge all snapshots back into original context
+        # Merge all snapshots back into original score
         all_snapshots = async_snapshots + sync_snapshots
-        merge_snapshots(self._context, all_snapshots, self._merge_strategy)
+        merge_snapshots(score_as_score, all_snapshots, self._merge_strategy)
 
         return None
 
     async def _execute_direct(self) -> bool | None:
-        """Execute without copy-on-write (legacy behavior for non-Context types)."""
+        """Execute without copy-on-write (legacy behavior for non-Score types)."""
         async_tasks = []
         sync_tasks = []
 
@@ -119,14 +122,13 @@ class ParallelNode(Node[ContextT]):
             else:
                 sync_tasks.append(task)
 
-        async_coros = [task(self._context) for task in async_tasks]
+        async_coros = [task(self._score) for task in async_tasks]
 
         if sync_tasks:
             loop = asyncio.get_running_loop()
             with ThreadPoolExecutor(max_workers=len(sync_tasks)) as executor:
                 sync_futures = [
-                    loop.run_in_executor(executor, task, self._context)
-                    for task in sync_tasks
+                    loop.run_in_executor(executor, task, self._score) for task in sync_tasks
                 ]
                 await asyncio.gather(*async_coros, *sync_futures)
         elif async_coros:

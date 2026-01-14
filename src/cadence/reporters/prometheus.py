@@ -6,12 +6,16 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 try:
-    from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+    from prometheus_client import Counter, Gauge, Histogram  # type: ignore[import-not-found]
+
     HAS_PROMETHEUS = True
 except ImportError:
     HAS_PROMETHEUS = False
+    Counter = None
+    Gauge = None
+    Histogram = None
 
-ContextT = TypeVar("ContextT")
+ScoreT = TypeVar("ScoreT")
 
 
 def _check_prometheus() -> None:
@@ -97,7 +101,7 @@ class PrometheusReporter:
         prom_reporter = PrometheusReporter(prefix="myapp")
 
         flow = (
-            Cadence("checkout", ctx)
+            Cadence("checkout", score)
             .with_reporter(prom_reporter)
             .then("validate", validate)
             .then("process", process)
@@ -131,7 +135,7 @@ class PrometheusReporter:
         self,
         step_name: str,
         elapsed: float,
-        state: ContextT,
+        score: ScoreT,
     ) -> None:
         """Record step completion metrics."""
         # Parse flow and step from name
@@ -222,7 +226,7 @@ def prometheus_reporter(
         from cadence.reporters.prometheus import prometheus_reporter
 
         flow = (
-            Cadence("checkout", ctx)
+            Cadence("checkout", score)
             .with_reporter(prometheus_reporter("myapp"))
             .then("process", process)
         )
@@ -258,9 +262,9 @@ class MetricsMiddleware:
 
     async def __call__(
         self,
-        scope: dict,
-        receive: Callable,
-        send: Callable,
+        scope: dict[str, Any],
+        receive: Callable[..., Any],
+        send: Callable[..., Any],
     ) -> None:
         if scope["type"] == "http" and scope["path"] == self.path:
             await self._metrics_app(scope, receive, send)

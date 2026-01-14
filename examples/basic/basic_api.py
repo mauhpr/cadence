@@ -9,18 +9,18 @@ import asyncio
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 
-from cadence import Cadence, Context, beat, retry, timeout
+from cadence import Cadence, Score, note, retry, timeout
 from cadence.reporters import console_reporter
 
 
-# --- Context Definition ---
+# --- Score Definition ---
 
 @dataclass
-class DashboardContext(Context):
-    """Context container for the dashboard cadence."""
+class DashboardScore(Score):
+    """Score container for the dashboard cadence."""
     user_id: str
 
-    # Populated by steps
+    # Populated by notes
     profile: Optional[Dict[str, Any]] = None
     preferences: Optional[Dict[str, Any]] = None
     notifications: Optional[List[Dict[str, Any]]] = None
@@ -65,53 +65,53 @@ notification_svc = NotificationService()
 recommendation_svc = RecommendationService()
 
 
-# --- Beat Definitions ---
+# --- Note Definitions ---
 
-@beat
+@note
 @retry(max_attempts=3, backoff="exponential")
 @timeout(2.0)
-async def fetch_profile(ctx: DashboardContext) -> None:
+async def fetch_profile(score: DashboardScore) -> None:
     """Fetch user profile from user service."""
-    ctx.profile = await user_svc.get_profile(ctx.user_id)
+    score.profile = await user_svc.get_profile(score.user_id)
 
 
-@beat
+@note
 @timeout(2.0)
-async def fetch_preferences(ctx: DashboardContext) -> None:
+async def fetch_preferences(score: DashboardScore) -> None:
     """Fetch user preferences."""
-    ctx.preferences = await user_svc.get_preferences(ctx.user_id)
+    score.preferences = await user_svc.get_preferences(score.user_id)
 
 
-@beat
+@note
 @timeout(2.0)
-async def fetch_notifications(ctx: DashboardContext) -> None:
+async def fetch_notifications(score: DashboardScore) -> None:
     """Fetch unread notifications."""
-    ctx.notifications = await notification_svc.get_unread(ctx.user_id)
+    score.notifications = await notification_svc.get_unread(score.user_id)
 
 
-@beat
-async def generate_recommendations(ctx: DashboardContext) -> None:
+@note
+async def generate_recommendations(score: DashboardScore) -> None:
     """Generate personalized recommendations based on profile and preferences."""
-    ctx.recommendations = await recommendation_svc.get_recommendations(
-        ctx.profile, ctx.preferences
+    score.recommendations = await recommendation_svc.get_recommendations(
+        score.profile, score.preferences
     )
 
 
-@beat
-def log_completion(ctx: DashboardContext) -> None:
+@note
+def log_completion(score: DashboardScore) -> None:
     """Log that the dashboard was successfully built."""
-    print(f"\nDashboard ready for user {ctx.user_id}")
-    print(f"  Profile: {ctx.profile['name']} ({ctx.profile['tier']})")
-    print(f"  Notifications: {len(ctx.notifications)} unread")
-    print(f"  Recommendations: {len(ctx.recommendations)} items")
+    print(f"\nDashboard ready for user {score.user_id}")
+    print(f"  Profile: {score.profile['name']} ({score.profile['tier']})")
+    print(f"  Notifications: {len(score.notifications)} unread")
+    print(f"  Recommendations: {len(score.recommendations)} items")
 
 
 # --- Cadence Definition ---
 
-def create_dashboard_cadence(user_id: str) -> Cadence[DashboardContext]:
+def create_dashboard_cadence(user_id: str) -> Cadence[DashboardScore]:
     """Create the dashboard cadence for a given user."""
     return (
-        Cadence("dashboard", DashboardContext(user_id=user_id))
+        Cadence("dashboard", DashboardScore(user_id=user_id))
         .with_reporter(console_reporter)
         .sync("fetch_user_data", [
             fetch_profile,
@@ -120,7 +120,7 @@ def create_dashboard_cadence(user_id: str) -> Cadence[DashboardContext]:
         ])
         .then("recommendations", generate_recommendations)
         .then("complete", log_completion)
-        .on_error(lambda ctx, err: print(f"Error: {err}"))
+        .on_error(lambda score, err: print(f"Error: {err}"))
     )
 
 

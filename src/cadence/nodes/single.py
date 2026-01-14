@@ -1,4 +1,4 @@
-"""Single task node."""
+"""Single task measure."""
 
 from __future__ import annotations
 
@@ -6,33 +6,33 @@ import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from cadence.nodes.base import Node
+from cadence.nodes.base import Measure
 
-ContextT = TypeVar("ContextT")
+ScoreT = TypeVar("ScoreT")
 
 
-class SingleNode(Node[ContextT]):
+class SingleMeasure(Measure[ScoreT]):
     """
     Executes a single task.
 
-    The task receives the context and can modify it.
+    The task receives the score and can modify it.
     """
 
     def __init__(
         self,
-        context: ContextT,
+        score: ScoreT,
         name: str,
-        task: Callable[[ContextT], Any],
+        task: Callable[[ScoreT], Any],
         *,
         can_interrupt: bool = False,
     ) -> None:
-        super().__init__(context, name)
+        super().__init__(score, name)
         self._task = task
         self._can_interrupt = can_interrupt
 
     async def execute(self) -> bool | None:
         """Execute the task."""
-        result = self._task(self._context)
+        result = self._task(self._score)
 
         # Await if coroutine
         if inspect.iscoroutine(result):

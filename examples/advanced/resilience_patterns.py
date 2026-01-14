@@ -15,8 +15,8 @@ from typing import Optional, List, Dict, Any
 
 from cadence import (
     Cadence,
-    Context,
-    beat,
+    Score,
+    note,
     retry,
     timeout,
     fallback,
@@ -29,12 +29,12 @@ from cadence import (
 )
 
 
-# --- Context Definition ---
+# --- Score Definition ---
 
 
 @dataclass
-class DataFetchContext(Context):
-    """Context for data fetching cadence."""
+class DataFetchScore(Score):
+    """Score for data fetching cadence."""
     request_id: str
 
     # Results from various services
@@ -116,64 +116,64 @@ overloaded_svc = OverloadedService("OverloadedAPI")
 # --- Retry Pattern ---
 
 
-@beat
+@note
 @retry(max_attempts=5, backoff="exponential", delay=0.1, max_delay=2.0)
-async def fetch_with_retry(ctx: DataFetchContext) -> None:
+async def fetch_with_retry(score: DataFetchScore) -> None:
     """
     Fetch data with automatic retries.
 
     Uses exponential backoff: 0.1s, 0.2s, 0.4s, 0.8s, 1.6s (capped at 2s)
     """
     print(f"  Attempting to fetch (call #{unreliable_svc.call_count + 1})...")
-    ctx.primary_data = await unreliable_svc.call()
+    score.primary_data = await unreliable_svc.call()
 
 
-@beat
+@note
 @retry(max_attempts=3, backoff="linear", delay=0.2)
-async def fetch_with_linear_retry(ctx: DataFetchContext) -> None:
+async def fetch_with_linear_retry(score: DataFetchScore) -> None:
     """
     Fetch data with linear backoff retries.
 
     Delays: 0.2s, 0.4s, 0.6s
     """
     print(f"  Linear retry attempt...")
-    ctx.backup_data = await unreliable_svc.call()
+    score.backup_data = await unreliable_svc.call()
 
 
 # --- Timeout Pattern ---
 
 
-@beat
+@note
 @timeout(0.5)  # 500ms timeout
-async def fetch_with_timeout(ctx: DataFetchContext) -> None:
+async def fetch_with_timeout(score: DataFetchScore) -> None:
     """
     Fetch data with a strict timeout.
 
     If the service doesn't respond within 500ms, abort.
     """
     print("  Fetching with timeout...")
-    ctx.enrichment = await slow_svc.call(timeout_seconds=0.5)
+    score.enrichment = await slow_svc.call(timeout_seconds=0.5)
 
 
-@beat
+@note
 @retry(max_attempts=3, delay=0.1)
 @timeout(0.5)
-async def fetch_with_retry_and_timeout(ctx: DataFetchContext) -> None:
+async def fetch_with_retry_and_timeout(score: DataFetchScore) -> None:
     """
     Combine retry with timeout.
 
     Each attempt has a 500ms timeout, with 3 total attempts.
     """
     print("  Fetching with retry + timeout...")
-    ctx.analytics = await slow_svc.call(timeout_seconds=0.5)
+    score.analytics = await slow_svc.call(timeout_seconds=0.5)
 
 
 # --- Fallback Pattern ---
 
 
-@beat
+@note
 @fallback({"source": "fallback", "data": "default_value"})
-async def fetch_with_fallback(ctx: DataFetchContext) -> None:
+async def fetch_with_fallback(score: DataFetchScore) -> None:
     """
     Fetch data with a fallback value on failure.
 
@@ -181,20 +181,20 @@ async def fetch_with_fallback(ctx: DataFetchContext) -> None:
     """
     print("  Fetching with fallback...")
     raise ConnectionError("Service unavailable")
-    ctx.cache_result = {"never": "reached"}  # This line won't execute
+    score.cache_result = {"never": "reached"}  # This line won't execute
 
 
-@beat
+@note
 @retry(max_attempts=2, delay=0.05)
 @fallback({"source": "cache", "stale": True})
-async def fetch_with_retry_then_fallback(ctx: DataFetchContext) -> None:
+async def fetch_with_retry_then_fallback(score: DataFetchScore) -> None:
     """
     Try with retries first, then fall back to cache.
 
     Retry twice, and if still failing, use stale cache data.
     """
     print("  Fetching with retry then fallback...")
-    ctx.cache_result = await unreliable_svc.call()
+    score.cache_result = await unreliable_svc.call()
 
 
 # --- Circuit Breaker Pattern ---
@@ -209,9 +209,9 @@ api_circuit = CircuitBreaker(
 )
 
 
-@beat
+@note
 @circuit_breaker(api_circuit)
-async def fetch_with_circuit_breaker(ctx: DataFetchContext) -> None:
+async def fetch_with_circuit_breaker(score: DataFetchScore) -> None:
     """
     Fetch data with circuit breaker protection.
 
@@ -219,7 +219,7 @@ async def fetch_with_circuit_breaker(ctx: DataFetchContext) -> None:
     After 5 seconds, it enters half-open state to test recovery.
     """
     print(f"  Circuit state: {api_circuit.state.name}")
-    ctx.enrichment = await overloaded_svc.call()
+    score.enrichment = await overloaded_svc.call()
 
 
 # --- Demo Functions ---
@@ -235,10 +235,10 @@ async def demo_retry():
     unreliable_svc.call_count = 0
     unreliable_svc.failure_rate = 0.6
 
-    ctx = DataFetchContext(request_id="retry-demo")
+    score = DataFetchScore(request_id="retry-demo")
 
     cadence = (
-        Cadence("retry_demo", ctx)
+        Cadence("retry_demo", score)
         .then("fetch", fetch_with_retry)
     )
 
@@ -256,10 +256,10 @@ async def demo_timeout():
     print("DEMO: @timeout - Time-Limited Execution")
     print("=" * 60)
 
-    ctx = DataFetchContext(request_id="timeout-demo")
+    score = DataFetchScore(request_id="timeout-demo")
 
     cadence = (
-        Cadence("timeout_demo", ctx)
+        Cadence("timeout_demo", score)
         .then("fetch", fetch_with_timeout)
     )
 
@@ -277,15 +277,15 @@ async def demo_fallback():
     print("DEMO: @fallback - Graceful Degradation")
     print("=" * 60)
 
-    ctx = DataFetchContext(request_id="fallback-demo")
+    score = DataFetchScore(request_id="fallback-demo")
 
-    @beat
+    @note
     @fallback({"source": "default", "message": "Service unavailable"})
-    async def always_fails(ctx: DataFetchContext) -> None:
+    async def always_fails(score: DataFetchScore) -> None:
         raise ConnectionError("Service down!")
 
     cadence = (
-        Cadence("fallback_demo", ctx)
+        Cadence("fallback_demo", score)
         .then("fetch", always_fails)
     )
 
@@ -309,10 +309,10 @@ async def demo_circuit_breaker():
     print("(Circuit opens after 3 failures, then fails fast)\n")
 
     for i in range(6):
-        ctx = DataFetchContext(request_id=f"circuit-demo-{i}")
+        score = DataFetchScore(request_id=f"circuit-demo-{i}")
 
         cadence = (
-            Cadence(f"circuit_demo_{i}", ctx)
+            Cadence(f"circuit_demo_{i}", score)
             .then("fetch", fetch_with_circuit_breaker)
         )
 
@@ -338,18 +338,18 @@ async def demo_combined():
     unreliable_svc.call_count = 0
     unreliable_svc.failure_rate = 0.8  # High failure rate
 
-    ctx = DataFetchContext(request_id="combined-demo")
+    score = DataFetchScore(request_id="combined-demo")
 
-    @beat
+    @note
     @retry(max_attempts=3, delay=0.05)
     @timeout(0.3)
     @fallback({"source": "emergency_cache", "stale": True})
-    async def resilient_fetch(ctx: DataFetchContext) -> None:
-        """A beat with multiple resilience layers."""
-        ctx.primary_data = await unreliable_svc.call()
+    async def resilient_fetch(score: DataFetchScore) -> None:
+        """A note with multiple resilience layers."""
+        score.primary_data = await unreliable_svc.call()
 
     cadence = (
-        Cadence("combined_demo", ctx)
+        Cadence("combined_demo", score)
         .then("fetch", resilient_fetch)
     )
 
@@ -375,14 +375,14 @@ async def demo_circuit_breaker_states():
     # Service that always fails initially
     failures_before_recovery = 4
 
-    @beat
+    @note
     @circuit_breaker(demo_circuit)
-    async def controlled_service(ctx: DataFetchContext) -> None:
+    async def controlled_service(score: DataFetchScore) -> None:
         nonlocal failures_before_recovery
         if failures_before_recovery > 0:
             failures_before_recovery -= 1
             raise ConnectionError("Service error")
-        ctx.primary_data = {"status": "recovered"}
+        score.primary_data = {"status": "recovered"}
 
     print("\nState transitions: CLOSED → OPEN → HALF_OPEN → (CLOSED or OPEN)")
     print()
@@ -390,8 +390,8 @@ async def demo_circuit_breaker_states():
     # Phase 1: Trigger circuit open
     print("Phase 1: Triggering failures to open circuit...")
     for i in range(3):
-        ctx = DataFetchContext(request_id=f"state-{i}")
-        cadence = Cadence(f"state_demo_{i}", ctx).then("call", controlled_service)
+        score = DataFetchScore(request_id=f"state-{i}")
+        cadence = Cadence(f"state_demo_{i}", score).then("call", controlled_service)
         try:
             await cadence.run()
         except (ConnectionError, CircuitOpenError) as e:
@@ -405,8 +405,8 @@ async def demo_circuit_breaker_states():
     print("\nPhase 3: Testing in HALF_OPEN state...")
     failures_before_recovery = 0  # Service has recovered
 
-    ctx = DataFetchContext(request_id="recovery")
-    cadence = Cadence("recovery_demo", ctx).then("call", controlled_service)
+    score = DataFetchScore(request_id="recovery")
+    cadence = Cadence("recovery_demo", score).then("call", controlled_service)
     try:
         result = await cadence.run()
         print(f"  Recovery call: {demo_circuit.state.name} - Success!")

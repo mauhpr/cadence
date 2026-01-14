@@ -1,4 +1,4 @@
-"""Beat decorator for marking functions as cadence beats."""
+"""Note decorator for marking functions as cadence notes."""
 
 from __future__ import annotations
 
@@ -10,16 +10,16 @@ from typing import Any, TypeVar
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-class Beat:
+class Note:
     """
-    Wrapper for a beat function with metadata.
+    Wrapper for a note function with metadata.
 
-    Allows attaching resilience decorators and tracking beat info.
+    Allows attaching resilience decorators and tracking note info.
     """
 
     def __init__(
         self,
-        fn: Callable,
+        fn: Callable[..., Any],
         *,
         name: str | None = None,
         description: str | None = None,
@@ -48,41 +48,41 @@ class Beat:
         return self._fn(*args, **kwargs)
 
     def __repr__(self) -> str:
-        return f"<Beat: {self._name}>"
+        return f"<Note: {self._name}>"
 
 
-def beat(
+def note(
     fn: F | None = None,
     *,
     name: str | None = None,
     description: str | None = None,
-) -> Beat | Callable[[F], Beat]:
+) -> Note | Callable[[F], Note]:
     """
-    Decorator to mark a function as a cadence beat.
+    Decorator to mark a function as a cadence note.
 
     Can be used with or without arguments:
 
-        @beat
-        async def my_task(ctx): ...
+        @note
+        async def my_task(score): ...
 
-        @beat(name="custom_name", description="Does something")
-        async def my_task(ctx): ...
+        @note(name="custom_name", description="Does something")
+        async def my_task(score): ...
 
     Args:
         fn: The function to wrap (when used without parentheses)
-        name: Optional custom name for the beat
+        name: Optional custom name for the note
         description: Optional description for documentation
 
     Returns:
-        A Beat wrapper around the function
+        A Note wrapper around the function
     """
 
-    def decorator(func: F) -> Beat:
-        return Beat(func, name=name, description=description)
+    def decorator(func: F) -> Note:
+        return Note(func, name=name, description=description)
 
     if fn is not None:
-        # Called without parentheses: @beat
+        # Called without parentheses: @note
         return decorator(fn)
 
-    # Called with parentheses: @beat(name="...")
+    # Called with parentheses: @note(name="...")
     return decorator

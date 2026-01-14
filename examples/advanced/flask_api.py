@@ -11,16 +11,16 @@ from typing import Optional, List, Dict, Any
 
 from flask import Flask, jsonify, request
 
-from cadence import Cadence, Context, beat, retry, timeout, fallback
+from cadence import Cadence, Score, note, retry, timeout, fallback
 from cadence.integrations.flask import CadenceBlueprint, cadence_route
 
 
-# --- Context Definitions ---
+# --- Score Definitions ---
 
 
 @dataclass
-class ProductSearchContext(Context):
-    """Context for product search cadence."""
+class ProductSearchScore(Score):
+    """Score for product search cadence."""
     query: str
     category: Optional[str] = None
     min_price: Optional[float] = None
@@ -28,18 +28,18 @@ class ProductSearchContext(Context):
     page: int = 1
     limit: int = 20
 
-    # Populated by beats
+    # Populated by notes
     products: List[Dict[str, Any]] = field(default_factory=list)
     total_count: int = 0
     facets: Optional[Dict[str, Any]] = None
 
 
 @dataclass
-class ProductDetailContext(Context):
-    """Context for product detail cadence."""
+class ProductDetailScore(Score):
+    """Score for product detail cadence."""
     product_id: str
 
-    # Populated by beats
+    # Populated by notes
     product: Optional[Dict[str, Any]] = None
     reviews: List[Dict[str, Any]] = field(default_factory=list)
     related: List[Dict[str, Any]] = field(default_factory=list)
@@ -137,75 +137,75 @@ inventory_svc = InventoryService()
 facet_svc = FacetService()
 
 
-# --- Search Cadence Beats ---
+# --- Search Cadence Notes ---
 
 
-@beat
+@note
 @retry(max_attempts=3, backoff="exponential")
 @timeout(2.0)
-async def search_products(ctx: ProductSearchContext) -> None:
+async def search_products(score: ProductSearchScore) -> None:
     """Search for products matching the query."""
-    ctx.products = await product_svc.search(
-        query=ctx.query,
-        category=ctx.category,
-        min_price=ctx.min_price,
-        max_price=ctx.max_price,
+    score.products = await product_svc.search(
+        query=score.query,
+        category=score.category,
+        min_price=score.min_price,
+        max_price=score.max_price,
     )
-    ctx.total_count = len(ctx.products)
+    score.total_count = len(score.products)
 
 
-@beat
+@note
 @timeout(1.0)
 @fallback({})
-async def fetch_facets(ctx: ProductSearchContext) -> None:
+async def fetch_facets(score: ProductSearchScore) -> None:
     """Fetch facets for filtering UI."""
-    ctx.facets = await facet_svc.get_facets(ctx.query)
+    score.facets = await facet_svc.get_facets(score.query)
 
 
-# --- Detail Cadence Beats ---
+# --- Detail Cadence Notes ---
 
 
-@beat
+@note
 @retry(max_attempts=2)
 @timeout(1.0)
-async def fetch_product(ctx: ProductDetailContext) -> None:
+async def fetch_product(score: ProductDetailScore) -> None:
     """Fetch product details."""
-    ctx.product = await product_svc.get_by_id(ctx.product_id)
-    if ctx.product is None:
-        raise ValueError(f"Product not found: {ctx.product_id}")
+    score.product = await product_svc.get_by_id(score.product_id)
+    if score.product is None:
+        raise ValueError(f"Product not found: {score.product_id}")
 
 
-@beat
+@note
 @timeout(2.0)
 @fallback([])
-async def fetch_reviews(ctx: ProductDetailContext) -> None:
+async def fetch_reviews(score: ProductDetailScore) -> None:
     """Fetch product reviews."""
-    ctx.reviews = await review_svc.get_reviews(ctx.product_id)
+    score.reviews = await review_svc.get_reviews(score.product_id)
 
 
-@beat
+@note
 @timeout(2.0)
 @fallback([])
-async def fetch_related(ctx: ProductDetailContext) -> None:
+async def fetch_related(score: ProductDetailScore) -> None:
     """Fetch related products."""
-    ctx.related = await product_svc.get_related(ctx.product_id)
+    score.related = await product_svc.get_related(score.product_id)
 
 
-@beat
+@note
 @timeout(1.0)
 @fallback({"in_stock": False, "quantity": 0})
-async def check_inventory(ctx: ProductDetailContext) -> None:
+async def check_inventory(score: ProductDetailScore) -> None:
     """Check product inventory."""
-    ctx.inventory = await inventory_svc.check_stock(ctx.product_id)
+    score.inventory = await inventory_svc.check_stock(score.product_id)
 
 
 # --- Cadence Definitions ---
 
 
-def create_search_cadence(ctx: ProductSearchContext) -> Cadence[ProductSearchContext]:
+def create_search_cadence(score: ProductSearchScore) -> Cadence[ProductSearchScore]:
     """Create a product search cadence."""
     return (
-        Cadence("product_search", ctx)
+        Cadence("product_search", score)
         .sync("fetch_data", [
             search_products,
             fetch_facets,
@@ -213,10 +213,10 @@ def create_search_cadence(ctx: ProductSearchContext) -> Cadence[ProductSearchCon
     )
 
 
-def create_detail_cadence(ctx: ProductDetailContext) -> Cadence[ProductDetailContext]:
+def create_detail_cadence(score: ProductDetailScore) -> Cadence[ProductDetailScore]:
     """Create a product detail cadence."""
     return (
-        Cadence("product_detail", ctx)
+        Cadence("product_detail", score)
         .then("fetch_product", fetch_product)
         .sync("enrich", [
             fetch_reviews,
@@ -238,8 +238,8 @@ products_bp = CadenceBlueprint("products", __name__, url_prefix="/api/products")
 @products_bp.route("/search")
 def search():
     """Search products endpoint."""
-    # Build context from query params
-    ctx = ProductSearchContext(
+    # Build score from query params
+    score = ProductSearchScore(
         query=request.args.get("q", ""),
         category=request.args.get("category"),
         min_price=float(request.args.get("min_price")) if request.args.get("min_price") else None,
@@ -249,7 +249,7 @@ def search():
     )
 
     # Run the cadence
-    cadence = create_search_cadence(ctx)
+    cadence = create_search_cadence(score)
     result = asyncio.run(cadence.run())
 
     return jsonify({
@@ -265,10 +265,10 @@ def search():
 @products_bp.route("/<product_id>")
 def get_product(product_id: str):
     """Get product details endpoint."""
-    ctx = ProductDetailContext(product_id=product_id)
+    score = ProductDetailScore(product_id=product_id)
 
     try:
-        cadence = create_detail_cadence(ctx)
+        cadence = create_detail_cadence(score)
         result = asyncio.run(cadence.run())
 
         return jsonify({

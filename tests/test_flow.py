@@ -4,64 +4,64 @@ import pytest
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from cadence import Cadence, Context, beat, MergeStrategy
+from cadence import Cadence, Score, note, MergeStrategy
 
 
 @dataclass
-class SampleContext(Context):
-    """Test context - renamed to avoid pytest collection warning."""
+class SampleScore(Score):
+    """Test score - renamed to avoid pytest collection warning."""
     value: int = 0
     items: Optional[List[str]] = None
 
 
-@beat
-async def increment(ctx: SampleContext) -> None:
-    ctx.value += 1
+@note
+async def increment(score: SampleScore) -> None:
+    score.value += 1
 
 
-@beat
-async def double(ctx: SampleContext) -> None:
-    ctx.value *= 2
+@note
+async def double(score: SampleScore) -> None:
+    score.value *= 2
 
 
-@beat
-async def append_a(ctx: SampleContext) -> None:
-    if ctx.items is None:
-        ctx.items = []
-    ctx.items.append("a")
+@note
+async def append_a(score: SampleScore) -> None:
+    if score.items is None:
+        score.items = []
+    score.items.append("a")
 
 
-@beat
-async def append_b(ctx: SampleContext) -> None:
-    if ctx.items is None:
-        ctx.items = []
-    ctx.items.append("b")
+@note
+async def append_b(score: SampleScore) -> None:
+    if score.items is None:
+        score.items = []
+    score.items.append("b")
 
 
-@beat
-def is_even(ctx: SampleContext) -> bool:
-    return ctx.value % 2 == 0
+@note
+def is_even(score: SampleScore) -> bool:
+    return score.value % 2 == 0
 
 
 class TestCadenceBasics:
     """Test basic cadence operations."""
 
     @pytest.mark.asyncio
-    async def test_single_beat(self):
-        """Test cadence with a single beat."""
-        ctx = SampleContext(value=1)
-        ctx.__post_init__()  # Initialize locks
-        cadence = Cadence("test", ctx).then("inc", increment)
+    async def test_single_note(self):
+        """Test cadence with a single note."""
+        score = SampleScore(value=1)
+        score.__post_init__()  # Initialize locks
+        cadence = Cadence("test", score).then("inc", increment)
         result = await cadence.run()
         assert result.value == 2
 
     @pytest.mark.asyncio
-    async def test_chained_beats(self):
-        """Test cadence with multiple chained beats."""
-        ctx = SampleContext(value=1)
-        ctx.__post_init__()
+    async def test_chained_notes(self):
+        """Test cadence with multiple chained notes."""
+        score = SampleScore(value=1)
+        score.__post_init__()
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .then("inc", increment)
             .then("double", double)
         )
@@ -71,10 +71,10 @@ class TestCadenceBasics:
     @pytest.mark.asyncio
     async def test_sequence(self):
         """Test sequential execution."""
-        ctx = SampleContext()
-        ctx.__post_init__()
+        score = SampleScore()
+        score.__post_init__()
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .sequence("seq", [append_a, append_b])
         )
         result = await cadence.run()
@@ -83,10 +83,10 @@ class TestCadenceBasics:
     @pytest.mark.asyncio
     async def test_sync(self):
         """Test parallel execution with smart_merge for list combining."""
-        ctx = SampleContext()
-        ctx.__post_init__()
+        score = SampleScore()
+        score.__post_init__()
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .sync("par", [append_a, append_b], merge_strategy=MergeStrategy.smart_merge)
         )
         result = await cadence.run()
@@ -100,10 +100,10 @@ class TestBranching:
     @pytest.mark.asyncio
     async def test_split_if_true(self):
         """Test split takes if_true path when condition is true."""
-        ctx = SampleContext(value=2)
-        ctx.__post_init__()
+        score = SampleScore(value=2)
+        score.__post_init__()
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .split("check",
                 condition=is_even,
                 if_true=[double],
@@ -115,10 +115,10 @@ class TestBranching:
     @pytest.mark.asyncio
     async def test_split_if_false(self):
         """Test split takes if_false path when condition is false."""
-        ctx = SampleContext(value=3)
-        ctx.__post_init__()
+        score = SampleScore(value=3)
+        score.__post_init__()
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .split("check",
                 condition=is_even,
                 if_true=[double],
@@ -133,15 +133,15 @@ class TestInterrupt:
 
     @pytest.mark.asyncio
     async def test_interrupt_stops_cadence(self):
-        """Test that returning True from a beat stops the cadence."""
-        @beat
-        async def stop_cadence(ctx: SampleContext) -> bool:
+        """Test that returning True from a note stops the cadence."""
+        @note
+        async def stop_cadence(score: SampleScore) -> bool:
             return True
 
-        ctx = SampleContext(value=1)
-        ctx.__post_init__()
+        score = SampleScore(value=1)
+        score.__post_init__()
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .then("stop", stop_cadence, can_interrupt=True)
             .then("inc", increment)  # Should not run
         )
@@ -154,22 +154,22 @@ class TestReporter:
 
     @pytest.mark.asyncio
     async def test_reporter_called(self):
-        """Test that reporter is called for each beat."""
+        """Test that reporter is called for each note."""
         reports = []
 
-        def reporter(name: str, elapsed: float, ctx: SampleContext) -> None:
+        def reporter(name: str, elapsed: float, score: SampleScore) -> None:
             reports.append(name)
 
-        ctx = SampleContext()
-        ctx.__post_init__()
+        score = SampleScore()
+        score.__post_init__()
         cadence = (
-            Cadence("test", ctx)
+            Cadence("test", score)
             .with_reporter(reporter)
-            .then("beat1", increment)
-            .then("beat2", double)
+            .then("note1", increment)
+            .then("note2", double)
         )
         await cadence.run()
 
-        assert "beat1" in reports
-        assert "beat2" in reports
+        assert "note1" in reports
+        assert "note2" in reports
         assert "test:TOTAL" in reports

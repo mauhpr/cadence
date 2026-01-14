@@ -2,8 +2,8 @@
 Parallel Execution Example
 
 This example demonstrates Cadence's parallel execution capabilities:
-- Running multiple beats concurrently
-- Context isolation between parallel branches
+- Running multiple notes concurrently
+- Score isolation between parallel branches
 - Merge strategies for combining results
 - Atomic collections for safe concurrent access
 """
@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 
 from cadence import (
     Cadence,
-    Context,
-    beat,
+    Score,
+    note,
     timeout,
     fallback,
     AtomicList,
@@ -25,15 +25,15 @@ from cadence import (
 )
 
 
-# --- Context Definitions ---
+# --- Score Definitions ---
 
 
 @dataclass
-class DataAggregationContext(Context):
-    """Context for data aggregation from multiple sources."""
+class DataAggregationScore(Score):
+    """Score for data aggregation from multiple sources."""
     query: str
 
-    # Results from parallel fetches (each beat writes to different field)
+    # Results from parallel fetches (each note writes to different field)
     database_results: list[dict] | None = None
     cache_results: list[dict] | None = None
     api_results: list[dict] | None = None
@@ -45,8 +45,8 @@ class DataAggregationContext(Context):
 
 
 @dataclass
-class ConcurrentWriteContext(Context):
-    """Context demonstrating safe concurrent writes with AtomicList."""
+class ConcurrentWriteScore(Score):
+    """Score demonstrating safe concurrent writes with AtomicList."""
     task_count: int = 5
 
     # Atomic collections for safe concurrent access
@@ -56,8 +56,8 @@ class ConcurrentWriteContext(Context):
 
 
 @dataclass
-class MergeStrategyContext(Context):
-    """Context demonstrating different merge strategies."""
+class MergeStrategyScore(Score):
+    """Score demonstrating different merge strategies."""
     # These will be modified by parallel tasks
     counter: int = 0
     items: list[str] = field(default_factory=list)
@@ -104,46 +104,46 @@ async def fetch_from_search(query: str) -> list[dict]:
 # --- Example 1: Basic Parallel Execution ---
 
 
-@beat
+@note
 @timeout(1.0)
-async def fetch_database(ctx: DataAggregationContext) -> None:
+async def fetch_database(score: DataAggregationScore) -> None:
     """Fetch from database."""
-    ctx.database_results = await fetch_from_database(ctx.query)
+    score.database_results = await fetch_from_database(score.query)
 
 
-@beat
+@note
 @timeout(0.5)
-async def fetch_cache(ctx: DataAggregationContext) -> None:
+async def fetch_cache(score: DataAggregationScore) -> None:
     """Fetch from cache."""
-    ctx.cache_results = await fetch_from_cache(ctx.query)
+    score.cache_results = await fetch_from_cache(score.query)
 
 
-@beat
+@note
 @timeout(2.0)
 @fallback([])
-async def fetch_api(ctx: DataAggregationContext) -> None:
+async def fetch_api(score: DataAggregationScore) -> None:
     """Fetch from external API (with fallback on failure)."""
-    ctx.api_results = await fetch_from_api(ctx.query)
+    score.api_results = await fetch_from_api(score.query)
 
 
-@beat
+@note
 @timeout(1.5)
 @fallback([])
-async def fetch_search(ctx: DataAggregationContext) -> None:
+async def fetch_search(score: DataAggregationScore) -> None:
     """Fetch from search engine (with fallback on failure)."""
-    ctx.search_results = await fetch_from_search(ctx.query)
+    score.search_results = await fetch_from_search(score.query)
 
 
-@beat
-def merge_results(ctx: DataAggregationContext) -> None:
+@note
+def merge_results(score: DataAggregationScore) -> None:
     """Merge results from all sources."""
     all_results = []
-    for results in [ctx.database_results, ctx.cache_results, ctx.api_results, ctx.search_results]:
+    for results in [score.database_results, score.cache_results, score.api_results, score.search_results]:
         if results:
             all_results.extend(results)
 
-    ctx.merged_data = all_results
-    ctx.total_count = len(all_results)
+    score.merged_data = all_results
+    score.total_count = len(all_results)
 
 
 async def demo_basic_parallel():
@@ -152,13 +152,13 @@ async def demo_basic_parallel():
     print("DEMO 1: Basic Parallel Execution")
     print("=" * 60)
     print("\nFetching data from 4 sources in parallel...")
-    print("(Each source writes to a different context field)\n")
+    print("(Each source writes to a different score field)\n")
 
-    ctx = DataAggregationContext(query="cadence")
+    score = DataAggregationScore(query="cadence")
     timing = TimingHooks()
 
     cadence = (
-        Cadence("data_aggregation", ctx)
+        Cadence("data_aggregation", score)
         .with_hooks(timing)
         .sync("fetch_all", [
             fetch_database,
@@ -191,42 +191,42 @@ async def demo_atomic_collections():
     print("=" * 60)
     print("\nMultiple parallel tasks writing to shared AtomicList and AtomicDict...")
 
-    @beat
-    async def process_task_1(ctx: ConcurrentWriteContext) -> None:
+    @note
+    async def process_task_1(score: ConcurrentWriteScore) -> None:
         await asyncio.sleep(random.uniform(0.01, 0.05))
-        ctx.results.append({"task": 1, "value": "result_1"})
-        ctx.metrics.set("task_1_time", random.uniform(10, 50))
+        score.results.append({"task": 1, "value": "result_1"})
+        score.metrics.set("task_1_time", random.uniform(10, 50))
 
-    @beat
-    async def process_task_2(ctx: ConcurrentWriteContext) -> None:
+    @note
+    async def process_task_2(score: ConcurrentWriteScore) -> None:
         await asyncio.sleep(random.uniform(0.01, 0.05))
-        ctx.results.append({"task": 2, "value": "result_2"})
-        ctx.metrics.set("task_2_time", random.uniform(10, 50))
+        score.results.append({"task": 2, "value": "result_2"})
+        score.metrics.set("task_2_time", random.uniform(10, 50))
 
-    @beat
-    async def process_task_3(ctx: ConcurrentWriteContext) -> None:
+    @note
+    async def process_task_3(score: ConcurrentWriteScore) -> None:
         await asyncio.sleep(random.uniform(0.01, 0.05))
         # Simulate an error being logged
-        ctx.errors.append("Task 3 had a warning")
-        ctx.results.append({"task": 3, "value": "result_3"})
-        ctx.metrics.set("task_3_time", random.uniform(10, 50))
+        score.errors.append("Task 3 had a warning")
+        score.results.append({"task": 3, "value": "result_3"})
+        score.metrics.set("task_3_time", random.uniform(10, 50))
 
-    @beat
-    async def process_task_4(ctx: ConcurrentWriteContext) -> None:
+    @note
+    async def process_task_4(score: ConcurrentWriteScore) -> None:
         await asyncio.sleep(random.uniform(0.01, 0.05))
-        ctx.results.append({"task": 4, "value": "result_4"})
-        ctx.metrics.set("task_4_time", random.uniform(10, 50))
+        score.results.append({"task": 4, "value": "result_4"})
+        score.metrics.set("task_4_time", random.uniform(10, 50))
 
-    @beat
-    async def process_task_5(ctx: ConcurrentWriteContext) -> None:
+    @note
+    async def process_task_5(score: ConcurrentWriteScore) -> None:
         await asyncio.sleep(random.uniform(0.01, 0.05))
-        ctx.results.append({"task": 5, "value": "result_5"})
-        ctx.metrics.set("task_5_time", random.uniform(10, 50))
+        score.results.append({"task": 5, "value": "result_5"})
+        score.metrics.set("task_5_time", random.uniform(10, 50))
 
-    ctx = ConcurrentWriteContext()
+    score = ConcurrentWriteScore()
 
     cadence = (
-        Cadence("concurrent_writes", ctx)
+        Cadence("concurrent_writes", score)
         .sync("process_all", [
             process_task_1,
             process_task_2,
@@ -262,23 +262,23 @@ async def demo_merge_strategies():
     print("\n--- Strategy: last_write_wins ---")
     print("When multiple tasks modify the same field, last write wins.\n")
 
-    @beat
-    async def modify_all_a(ctx: MergeStrategyContext) -> None:
+    @note
+    async def modify_all_a(score: MergeStrategyScore) -> None:
         await asyncio.sleep(0.01)
-        ctx.counter = 10
-        ctx.items.append("from_task_a")
-        ctx.metadata["task_a"] = "completed"
+        score.counter = 10
+        score.items.append("from_task_a")
+        score.metadata["task_a"] = "completed"
 
-    @beat
-    async def modify_all_b(ctx: MergeStrategyContext) -> None:
+    @note
+    async def modify_all_b(score: MergeStrategyScore) -> None:
         await asyncio.sleep(0.02)  # Finishes later
-        ctx.counter = 20
-        ctx.items.append("from_task_b")
-        ctx.metadata["task_b"] = "completed"
+        score.counter = 20
+        score.items.append("from_task_b")
+        score.metadata["task_b"] = "completed"
 
-    ctx1 = MergeStrategyContext()
+    score1 = MergeStrategyScore()
     cadence1 = (
-        Cadence("merge_last_write", ctx1)
+        Cadence("merge_last_write", score1)
         .sync("modify", [modify_all_a, modify_all_b],
               merge_strategy=MergeStrategy.last_write_wins)
     )
@@ -292,21 +292,21 @@ async def demo_merge_strategies():
     print("\n--- Strategy: smart_merge ---")
     print("Lists are concatenated, dicts are merged, scalars must match.\n")
 
-    @beat
-    async def append_list_a(ctx: MergeStrategyContext) -> None:
+    @note
+    async def append_list_a(score: MergeStrategyScore) -> None:
         await asyncio.sleep(0.01)
-        ctx.items.append("from_task_a")
-        ctx.metadata["task_a"] = "completed"
+        score.items.append("from_task_a")
+        score.metadata["task_a"] = "completed"
 
-    @beat
-    async def append_list_b(ctx: MergeStrategyContext) -> None:
+    @note
+    async def append_list_b(score: MergeStrategyScore) -> None:
         await asyncio.sleep(0.02)
-        ctx.items.append("from_task_b")
-        ctx.metadata["task_b"] = "completed"
+        score.items.append("from_task_b")
+        score.metadata["task_b"] = "completed"
 
-    ctx2 = MergeStrategyContext()
+    score2 = MergeStrategyScore()
     cadence2 = (
-        Cadence("merge_smart", ctx2)
+        Cadence("merge_smart", score2)
         .sync("modify", [append_list_a, append_list_b],
               merge_strategy=MergeStrategy.smart_merge)
     )
@@ -325,44 +325,44 @@ async def demo_nested_parallel():
     print("\n" + "=" * 60)
     print("DEMO 4: Nested Parallel Execution")
     print("=" * 60)
-    print("\nSequential phases with parallel beats within each phase...\n")
+    print("\nSequential phases with parallel notes within each phase...\n")
 
     @dataclass
-    class PipelineContext(Context):
+    class PipelineScore(Score):
         input_data: str
         phase1_results: list[str] = field(default_factory=list)
         phase2_results: list[str] = field(default_factory=list)
         final_result: str = ""
 
-    @beat
-    async def phase1_task_a(ctx: PipelineContext) -> None:
+    @note
+    async def phase1_task_a(score: PipelineScore) -> None:
         await asyncio.sleep(0.02)
-        ctx.phase1_results = ["p1_a_result"]
+        score.phase1_results = ["p1_a_result"]
 
-    @beat
-    async def phase1_task_b(ctx: PipelineContext) -> None:
+    @note
+    async def phase1_task_b(score: PipelineScore) -> None:
         await asyncio.sleep(0.03)
-        ctx.phase1_results = ["p1_b_result"]
+        score.phase1_results = ["p1_b_result"]
 
-    @beat
-    async def phase2_task_a(ctx: PipelineContext) -> None:
+    @note
+    async def phase2_task_a(score: PipelineScore) -> None:
         await asyncio.sleep(0.02)
-        ctx.phase2_results = [f"p2_a({ctx.phase1_results})"]
+        score.phase2_results = [f"p2_a({score.phase1_results})"]
 
-    @beat
-    async def phase2_task_b(ctx: PipelineContext) -> None:
+    @note
+    async def phase2_task_b(score: PipelineScore) -> None:
         await asyncio.sleep(0.01)
-        ctx.phase2_results = [f"p2_b({ctx.phase1_results})"]
+        score.phase2_results = [f"p2_b({score.phase1_results})"]
 
-    @beat
-    def finalize(ctx: PipelineContext) -> None:
-        ctx.final_result = f"Final: {ctx.phase1_results} -> {ctx.phase2_results}"
+    @note
+    def finalize(score: PipelineScore) -> None:
+        score.final_result = f"Final: {score.phase1_results} -> {score.phase2_results}"
 
-    ctx = PipelineContext(input_data="initial")
+    score = PipelineScore(input_data="initial")
     timing = TimingHooks()
 
     cadence = (
-        Cadence("nested_parallel", ctx)
+        Cadence("nested_parallel", score)
         .with_hooks(timing)
         # Phase 1: Two parallel tasks
         .sync("phase1", [phase1_task_a, phase1_task_b],
@@ -393,36 +393,36 @@ async def demo_parallel_error_handling():
     print("\nSome parallel tasks succeed, some fail (with fallbacks)...\n")
 
     @dataclass
-    class ErrorDemoContext(Context):
+    class ErrorDemoScore(Score):
         successful_tasks: list[str] = field(default_factory=list)
         failed_tasks: list[str] = field(default_factory=list)
 
-    @beat
-    async def task_success_1(ctx: ErrorDemoContext) -> None:
+    @note
+    async def task_success_1(score: ErrorDemoScore) -> None:
         await asyncio.sleep(0.01)
-        ctx.successful_tasks = ["task_1"]
+        score.successful_tasks = ["task_1"]
 
-    @beat
+    @note
     @fallback(None)
-    async def task_fails(ctx: ErrorDemoContext) -> None:
+    async def task_fails(score: ErrorDemoScore) -> None:
         await asyncio.sleep(0.02)
         raise ValueError("Simulated failure")
 
-    @beat
-    async def task_success_2(ctx: ErrorDemoContext) -> None:
+    @note
+    async def task_success_2(score: ErrorDemoScore) -> None:
         await asyncio.sleep(0.015)
-        ctx.successful_tasks = ["task_2"]
+        score.successful_tasks = ["task_2"]
 
-    @beat
+    @note
     @fallback(None)  # Fallback wraps timeout to catch timeout errors
     @timeout(0.001)  # Will timeout
-    async def task_timeout(ctx: ErrorDemoContext) -> None:
+    async def task_timeout(score: ErrorDemoScore) -> None:
         await asyncio.sleep(1.0)  # Too slow
 
-    ctx = ErrorDemoContext()
+    score = ErrorDemoScore()
 
     cadence = (
-        Cadence("error_handling", ctx)
+        Cadence("error_handling", score)
         .sync("all_tasks", [
             task_success_1,
             task_fails,

@@ -77,7 +77,7 @@ pytest tests/ -v --cov=cadence --cov-report=html
 pytest tests/test_cadence.py -v
 
 # Run a specific test
-pytest tests/test_cadence.py::TestCadenceBasics::test_single_beat -v
+pytest tests/test_cadence.py::TestCadenceBasics::test_single_note -v
 ```
 
 ### Code Quality
@@ -157,14 +157,14 @@ All public APIs should have type hints:
 ```python
 from typing import Optional, List, Callable, TypeVar
 
-ContextT = TypeVar("ContextT")
+ScoreT = TypeVar("ScoreT")
 
 def create_cadence(
     name: str,
-    context: ContextT,
+    score: ScoreT,
     *,
-    reporter: Optional[Callable[[str, float, ContextT], None]] = None,
-) -> Cadence[ContextT]:
+    reporter: Optional[Callable[[str, float, ScoreT], None]] = None,
+) -> Cadence[ScoreT]:
     ...
 ```
 
@@ -180,24 +180,24 @@ def create_cadence(
 
 ```python
 import pytest
-from cadence import Cadence, Context, beat
+from cadence import Cadence, Score, note
 from dataclasses import dataclass
 
 @dataclass
-class TestContext(Context):
+class TestScore(Score):
     value: int = 0
 
 class TestCadenceBasics:
     """Tests for basic Cadence functionality."""
 
     @pytest.mark.asyncio
-    async def test_single_beat_modifies_context(self):
-        """Verify that a single beat can modify the context."""
-        @beat
-        async def increment(ctx: TestContext):
-            ctx.value += 1
+    async def test_single_note_modifies_score(self):
+        """Verify that a single note can modify the score."""
+        @note
+        async def increment(score: TestScore):
+            score.value += 1
 
-        cadence = Cadence("test", TestContext(value=0)).then("inc", increment)
+        cadence = Cadence("test", TestScore(value=0)).then("inc", increment)
         result = await cadence.run()
 
         assert result.value == 1
@@ -207,14 +207,14 @@ class TestCadenceBasics:
         """Verify that error handlers are called on failure."""
         errors = []
 
-        @beat
-        async def failing_beat(ctx: TestContext):
+        @note
+        async def failing_note(score: TestScore):
             raise ValueError("Test error")
 
         cadence = (
-            Cadence("test", TestContext())
-            .then("fail", failing_beat)
-            .on_error(lambda ctx, err: errors.append(err))
+            Cadence("test", TestScore())
+            .then("fail", failing_note)
+            .on_error(lambda score, err: errors.append(err))
         )
 
         await cadence.run()
@@ -269,27 +269,38 @@ cadence/
 │   └── cadence/
 │       ├── __init__.py          # Package exports
 │       ├── cadence.py           # Core Cadence class
-│       ├── context.py           # Context management
-│       ├── beat.py              # Beat decorator
+│       ├── score.py             # Score management
+│       ├── note.py              # Note decorator
 │       ├── result.py            # Result types (Ok, Err)
 │       ├── exceptions.py        # Exception classes
-│       ├── resilience.py        # Retry, timeout, fallback, circuit breaker
+│       ├── types.py             # Type definitions
 │       ├── hooks.py             # Hooks system
 │       ├── diagram.py           # Cadence diagram generation
 │       ├── cli.py               # CLI commands
-│       ├── reporters.py         # Time reporters
-│       ├── nodes/               # Node implementations
+│       ├── nodes/               # Node (Measure) implementations
 │       │   ├── base.py
 │       │   ├── single.py
 │       │   ├── sequence.py
 │       │   ├── parallel.py
 │       │   ├── branch.py
 │       │   └── child.py
+│       ├── resilience/          # Resilience patterns
+│       │   ├── retry.py
+│       │   ├── timeout.py
+│       │   ├── fallback.py
+│       │   └── circuit_breaker.py
+│       ├── reporters/           # Metrics reporters
+│       │   ├── console.py
+│       │   ├── prometheus.py
+│       │   └── opentelemetry.py
 │       └── integrations/        # Framework integrations
 │           ├── fastapi.py
 │           └── flask.py
 ├── tests/                       # Test files
 ├── examples/                    # Example code
+│   ├── basic/                   # Getting started examples
+│   ├── intermediate/            # Branching, parallelism, hooks
+│   └── advanced/                # Framework integration, testing
 ├── docs/                        # Documentation
 └── pyproject.toml              # Project configuration
 ```

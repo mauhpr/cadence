@@ -274,3 +274,222 @@ class TestCircuitBreaker:
 
         cb._record_failure()  # Second failure - opens
         assert cb.state == CircuitState.OPEN
+
+
+class TestRetrySyncFunctions:
+    """Test retry decorator with synchronous functions."""
+
+    def test_retry_sync_succeeds_first_try(self):
+        """Test sync function succeeds without retry."""
+        call_count = 0
+
+        @retry(max_attempts=3)
+        def succeed():
+            nonlocal call_count
+            call_count += 1
+            return "success"
+
+        result = succeed()
+        assert result == "success"
+        assert call_count == 1
+
+    def test_retry_sync_succeeds_after_failures(self):
+        """Test sync function retries and eventually succeeds."""
+        call_count = 0
+
+        @retry(max_attempts=3, delay=0.01, jitter=False)
+        def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError("transient")
+            return "ok"
+
+        result = flaky()
+        assert result == "ok"
+        assert call_count == 3
+
+    def test_retry_sync_exhausted(self):
+        """Test sync function raises after exhausting retries."""
+        call_count = 0
+
+        @retry(max_attempts=2, delay=0.01)
+        def always_fail():
+            nonlocal call_count
+            call_count += 1
+            raise ValueError("error")
+
+        with pytest.raises(RetryExhaustedError):
+            always_fail()
+
+        assert call_count == 2
+
+
+class TestRetryBackoffStrategies:
+    """Test different retry backoff strategies."""
+
+    @pytest.mark.asyncio
+    async def test_retry_linear_backoff(self):
+        """Test linear backoff multiplies delay by attempt."""
+        call_count = 0
+
+        @retry(max_attempts=3, delay=0.01, backoff="linear", jitter=False)
+        async def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError("error")
+            return "ok"
+
+        result = await flaky()
+        assert result == "ok"
+
+    @pytest.mark.asyncio
+    async def test_retry_exponential_backoff(self):
+        """Test exponential backoff doubles delay each attempt."""
+        call_count = 0
+
+        @retry(max_attempts=3, delay=0.01, backoff="exponential", jitter=False)
+        async def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError("error")
+            return "ok"
+
+        result = await flaky()
+        assert result == "ok"
+
+    @pytest.mark.asyncio
+    async def test_retry_unknown_backoff_uses_fixed(self):
+        """Test unknown backoff strategy falls back to fixed."""
+        call_count = 0
+
+        @retry(max_attempts=2, delay=0.01, backoff="unknown", jitter=False)
+        async def flaky():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ValueError("error")
+            return "ok"
+
+        result = await flaky()
+        assert result == "ok"
+
+
+class TestFallbackSyncFunctions:
+    """Test fallback decorator with synchronous functions."""
+
+    def test_fallback_sync_success(self):
+        """Test sync function doesn't use fallback on success."""
+        @fallback(default="fallback")
+        def succeed():
+            return "success"
+
+        result = succeed()
+        assert result == "success"
+
+    def test_fallback_sync_uses_default(self):
+        """Test sync function uses default on error."""
+        @fallback(default="fallback")
+        def fail():
+            raise ValueError("error")
+
+        result = fail()
+        assert result == "fallback"
+
+    def test_fallback_sync_uses_handler(self):
+        """Test sync function uses handler on error."""
+        @fallback(handler=lambda e: f"handled: {e}")
+        def fail():
+            raise ValueError("oops")
+
+        result = fail()
+        assert result == "handled: oops"
+
+
+class TestFallbackAsyncWithHandler:
+    """Test fallback decorator with async handler."""
+
+    @pytest.mark.asyncio
+    async def test_fallback_async_with_handler(self):
+        """Test async function uses handler on error."""
+        @fallback(handler=lambda e: f"caught: {type(e).__name__}")
+        async def fail():
+            raise RuntimeError("boom")
+
+        result = await fail()
+        assert result == "caught: RuntimeError"
+
+
+class TestTimeoutSyncFunctions:
+    """Test timeout decorator with synchronous functions."""
+
+    def test_timeout_sync_completes_in_time(self):
+        """Test sync function completes before timeout."""
+        @timeout(seconds=1.0)
+        def fast():
+            return "done"
+
+        result = fast()
+        assert result == "done"
+
+
+class TestCircuitBreakerSyncFunctions:
+    """Test circuit breaker with synchronous functions."""
+
+    def test_circuit_breaker_sync_success(self):
+        """Test sync function works with circuit breaker."""
+        @circuit_breaker(failure_threshold=3, name="sync_test")
+        def succeed():
+            return "ok"
+
+        result = succeed()
+        assert result == "ok"
+
+    def test_circuit_breaker_sync_opens(self):
+        """Test sync circuit breaker opens after failures."""
+        call_count = 0
+
+        @circuit_breaker(failure_threshold=2, recovery_timeout=10.0, name="sync_open")
+        def fail():
+            nonlocal call_count
+            call_count += 1
+            raise ValueError("error")
+
+        # First two calls fail
+        with pytest.raises(ValueError):
+            fail()
+        with pytest.raises(ValueError):
+            fail()
+
+        # Third should be blocked
+        with pytest.raises(CircuitOpenError):
+            fail()
+
+        assert call_count == 2
+
+
+class TestGetCircuit:
+    """Test get_circuit helper function."""
+
+    def test_get_circuit_returns_existing(self):
+        """Test get_circuit returns existing circuit."""
+        # Create a circuit via decorator
+        @circuit_breaker(failure_threshold=3, name="get_test")
+        def dummy():
+            pass
+
+        # Get the circuit
+        cb = get_circuit("get_test")
+        assert cb is not None
+        assert cb.name == "get_test"
+
+    def test_get_circuit_creates_new_for_unknown(self):
+        """Test get_circuit creates new circuit for unknown name."""
+        cb = get_circuit("new_test_circuit_12345")
+        assert cb is not None
+        assert cb.name == "new_test_circuit_12345"
+        # Should return same instance on second call
+        cb2 = get_circuit("new_test_circuit_12345")
+        assert cb is cb2

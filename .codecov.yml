@@ -1,0 +1,56 @@
+# Codecov configuration for Cadence
+# https://docs.codecov.com/docs/codecovyml-reference
+
+coverage:
+  # Overall project coverage settings
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 2%
+        informational: false
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+        informational: false
+
+  # Coverage precision
+  precision: 2
+  round: down
+  range: "60...100"
+
+# Ignore patterns
+ignore:
+  - "tests/**/*"
+  - "examples/**/*"
+  - "**/__init__.py"
+  - "**/cli.py"  # CLI is tested manually
+
+# Comment settings for PRs
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true
+  require_base: false
+  require_head: true
+
+# Flag management
+flags:
+  unittests:
+    paths:
+      - src/cadence/
+    carryforward: true
+
+# Parsers
+parsers:
+  gcov:
+    branch_detection:
+      conditional: true
+      loop: true
+      macro: false
+      method: false
+
+# GitHub checks
+github_checks:
+  annotations: true

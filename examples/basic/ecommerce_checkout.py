@@ -12,16 +12,16 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
-from cadence import Cadence, Context, beat, retry, timeout, fallback
+from cadence import Cadence, Score, note, retry, timeout, fallback
 from cadence.exceptions import CadenceError
 from cadence.reporters import console_reporter
 
 
-# --- Context Definitions ---
+# --- Score Definitions ---
 
 @dataclass
-class PaymentContext(Context):
-    """Context for payment sub-cadence."""
+class PaymentScore(Score):
+    """Score for payment sub-cadence."""
     amount: float
     card_token: str
 
@@ -30,8 +30,8 @@ class PaymentContext(Context):
 
 
 @dataclass
-class CheckoutContext(Context):
-    """Context for the main checkout cadence."""
+class CheckoutScore(Score):
+    """Score for the main checkout cadence."""
     user_id: str
     cart_id: str
 
@@ -104,97 +104,97 @@ shipping_svc = ShippingService()
 notification_svc = NotificationService()
 
 
-# --- Payment Cadence Beats ---
+# --- Payment Cadence Notes ---
 
-@beat
+@note
 @retry(max_attempts=3, on=(ConnectionError,))
-async def authorize_payment(ctx: PaymentContext) -> None:
+async def authorize_payment(score: PaymentScore) -> None:
     """Authorize the payment."""
-    result = await payment_svc.authorize(ctx.amount, ctx.card_token)
-    ctx.authorized = result["authorized"]
-    ctx.transaction_id = result["transaction_id"]
+    result = await payment_svc.authorize(score.amount, score.card_token)
+    score.authorized = result["authorized"]
+    score.transaction_id = result["transaction_id"]
 
 
-# --- Checkout Cadence Beats ---
+# --- Checkout Cadence Notes ---
 
-@beat
+@note
 @timeout(2.0)
-async def fetch_user(ctx: CheckoutContext) -> None:
+async def fetch_user(score: CheckoutScore) -> None:
     """Fetch user details."""
-    ctx.user = await user_svc.get(ctx.user_id)
+    score.user = await user_svc.get(score.user_id)
 
 
-@beat
+@note
 @timeout(2.0)
-async def fetch_cart(ctx: CheckoutContext) -> None:
+async def fetch_cart(score: CheckoutScore) -> None:
     """Fetch cart contents."""
-    ctx.cart = await cart_svc.get(ctx.cart_id)
+    score.cart = await cart_svc.get(score.cart_id)
 
 
-@beat
-async def check_inventory(ctx: CheckoutContext) -> None:
+@note
+async def check_inventory(score: CheckoutScore) -> None:
     """Verify all items are in stock."""
-    ctx.inventory_ok = await inventory_svc.check(ctx.cart["items"])
-    if not ctx.inventory_ok:
+    score.inventory_ok = await inventory_svc.check(score.cart["items"])
+    if not score.inventory_ok:
         raise CadenceError("Items out of stock", code="OUT_OF_STOCK")
 
 
-@beat
-async def create_order(ctx: CheckoutContext) -> None:
+@note
+async def create_order(score: CheckoutScore) -> None:
     """Create the order record."""
-    ctx.order_id = await order_svc.create(ctx.user, ctx.cart)
+    score.order_id = await order_svc.create(score.user, score.cart)
 
 
-@beat
-async def premium_shipping(ctx: CheckoutContext) -> None:
+@note
+async def premium_shipping(score: CheckoutScore) -> None:
     """Calculate premium shipping estimate."""
-    ctx.shipping_estimate = await shipping_svc.estimate(ctx.order_id, "premium")
-    print(f"  [Premium: {ctx.shipping_estimate}]")
+    score.shipping_estimate = await shipping_svc.estimate(score.order_id, "premium")
+    print(f"  [Premium: {score.shipping_estimate}]")
 
 
-@beat
-async def standard_shipping(ctx: CheckoutContext) -> None:
+@note
+async def standard_shipping(score: CheckoutScore) -> None:
     """Calculate standard shipping estimate."""
-    ctx.shipping_estimate = await shipping_svc.estimate(ctx.order_id, "standard")
-    print(f"  [Standard: {ctx.shipping_estimate}]")
+    score.shipping_estimate = await shipping_svc.estimate(score.order_id, "standard")
+    print(f"  [Standard: {score.shipping_estimate}]")
 
 
-@beat
-async def send_confirmation(ctx: CheckoutContext) -> None:
+@note
+async def send_confirmation(score: CheckoutScore) -> None:
     """Send order confirmation."""
-    await notification_svc.send_confirmation(ctx.user, ctx.order_id)
+    await notification_svc.send_confirmation(score.user, score.order_id)
 
 
-def is_premium_user(ctx: CheckoutContext) -> bool:
+def is_premium_user(score: CheckoutScore) -> bool:
     """Check if user is premium tier."""
-    return ctx.user.get("tier") == "premium"
+    return score.user.get("tier") == "premium"
 
 
-def merge_payment(parent: CheckoutContext, child: PaymentContext) -> None:
-    """Merge payment result into checkout context."""
+def merge_payment(parent: CheckoutScore, child: PaymentScore) -> None:
+    """Merge payment result into checkout score."""
     parent.payment_id = child.transaction_id
 
 
 # --- Cadence Definitions ---
 
-def create_payment_cadence(amount: float, card_token: str) -> Cadence[PaymentContext]:
+def create_payment_cadence(amount: float, card_token: str) -> Cadence[PaymentScore]:
     """Create a payment processing sub-cadence."""
     return (
-        Cadence("payment", PaymentContext(amount=amount, card_token=card_token))
+        Cadence("payment", PaymentScore(amount=amount, card_token=card_token))
         .then("authorize", authorize_payment)
     )
 
 
-def create_checkout_cadence(user_id: str, cart_id: str) -> Cadence[CheckoutContext]:
+def create_checkout_cadence(user_id: str, cart_id: str) -> Cadence[CheckoutScore]:
     """Create the main checkout cadence."""
-    ctx = CheckoutContext(user_id=user_id, cart_id=cart_id)
+    score = CheckoutScore(user_id=user_id, cart_id=cart_id)
 
     # Payment cadence will be created dynamically after we know the total
     # For this example, we use a placeholder amount
     payment_cadence = create_payment_cadence(amount=59.98, card_token="tok_visa")
 
     return (
-        Cadence("checkout", ctx)
+        Cadence("checkout", score)
         .with_reporter(console_reporter)
         # Fetch user and cart in parallel
         .sync("fetch_data", [fetch_user, fetch_cart])
@@ -215,11 +215,11 @@ def create_checkout_cadence(user_id: str, cart_id: str) -> Cadence[CheckoutConte
     )
 
 
-async def handle_checkout_error(ctx: CheckoutContext, error: Exception) -> None:
+async def handle_checkout_error(score: CheckoutScore, error: Exception) -> None:
     """Handle checkout errors."""
     print(f"\n[ERROR] Checkout failed: {error}")
-    if ctx.order_id:
-        print(f"  Rolling back order {ctx.order_id}...")
+    if score.order_id:
+        print(f"  Rolling back order {score.order_id}...")
 
 
 # --- Main ---

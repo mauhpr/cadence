@@ -13,8 +13,8 @@ from typing import Optional, List, Dict, Any
 
 from cadence import (
     Cadence,
-    Context,
-    beat,
+    Score,
+    note,
     retry,
     timeout,
     CadenceHooks,
@@ -32,17 +32,17 @@ logging.basicConfig(
 )
 
 
-# --- Context Definition ---
+# --- Score Definition ---
 
 
 @dataclass
-class OrderContext(Context):
-    """Context for order processing cadence."""
+class OrderScore(Score):
+    """Score for order processing cadence."""
     order_id: str
     customer_id: str
     items: List[Dict[str, Any]] = field(default_factory=list)
 
-    # Populated by beats
+    # Populated by notes
     validated: bool = False
     total: float = 0.0
     payment_status: Optional[str] = None
@@ -66,15 +66,15 @@ class AlertingHooks(CadenceHooks):
 
     async def on_error(
         self,
-        beat_name: str,
+        note_name: str,
         context: Any,
         error: Exception,
     ) -> Optional[bool]:
         """Track failures and alert if threshold exceeded."""
-        self._failure_counts[beat_name] = self._failure_counts.get(beat_name, 0) + 1
+        self._failure_counts[note_name] = self._failure_counts.get(note_name, 0) + 1
 
-        if self._failure_counts[beat_name] >= self._alert_threshold:
-            print(f"\n🚨 ALERT: Beat '{beat_name}' has failed {self._failure_counts[beat_name]} times!")
+        if self._failure_counts[note_name] >= self._alert_threshold:
+            print(f"\n🚨 ALERT: Note '{note_name}' has failed {self._failure_counts[note_name]} times!")
             print(f"   Error: {error}")
             # In production: send to alerting system
             # await pagerduty.create_incident(...)
@@ -83,14 +83,14 @@ class AlertingHooks(CadenceHooks):
 
     async def on_retry(
         self,
-        beat_name: str,
+        note_name: str,
         context: Any,
         attempt: int,
         max_attempts: int,
         error: Exception,
     ) -> None:
         """Log retry attempts."""
-        print(f"   ⟳ Retry {attempt}/{max_attempts} for '{beat_name}': {error}")
+        print(f"   ⟳ Retry {attempt}/{max_attempts} for '{note_name}': {error}")
 
 
 class AuditHooks(CadenceHooks):
@@ -125,22 +125,22 @@ class AuditHooks(CadenceHooks):
             "error": str(error) if error else None,
         })
 
-    async def before_beat(self, beat_name: str, context: Any) -> None:
+    async def before_note(self, note_name: str, context: Any) -> None:
         self._audit_log.append({
-            "event": "beat_started",
-            "beat": beat_name,
+            "event": "note_started",
+            "note": note_name,
         })
 
-    async def after_beat(
+    async def after_note(
         self,
-        beat_name: str,
+        note_name: str,
         context: Any,
         duration: float,
         error: Optional[Exception] = None,
     ) -> None:
         self._audit_log.append({
-            "event": "beat_completed",
-            "beat": beat_name,
+            "event": "note_completed",
+            "note": note_name,
             "duration": duration,
             "success": error is None,
         })
@@ -150,29 +150,29 @@ class AuditHooks(CadenceHooks):
         return self._audit_log.copy()
 
 
-# --- Beats ---
+# --- Notes ---
 
 
-@beat
-async def validate_order(ctx: OrderContext) -> None:
+@note
+async def validate_order(score: OrderScore) -> None:
     """Validate the order items and customer."""
     await asyncio.sleep(0.02)
-    if not ctx.items:
+    if not score.items:
         raise ValueError("Order must have at least one item")
-    ctx.validated = True
+    score.validated = True
 
 
-@beat
-async def calculate_total(ctx: OrderContext) -> None:
+@note
+async def calculate_total(score: OrderScore) -> None:
     """Calculate order total."""
     await asyncio.sleep(0.015)
-    ctx.total = sum(item.get("price", 0) * item.get("quantity", 1) for item in ctx.items)
+    score.total = sum(item.get("price", 0) * item.get("quantity", 1) for item in score.items)
 
 
-@beat
+@note
 @retry(max_attempts=3, backoff="exponential", base_delay=0.1)
 @timeout(2.0)
-async def process_payment(ctx: OrderContext) -> None:
+async def process_payment(score: OrderScore) -> None:
     """Process payment - may fail randomly to demonstrate retries."""
     await asyncio.sleep(0.03)
 
@@ -180,30 +180,30 @@ async def process_payment(ctx: OrderContext) -> None:
     if random.random() < 0.4:  # 40% failure rate
         raise ConnectionError("Payment gateway timeout")
 
-    ctx.payment_status = "completed"
+    score.payment_status = "completed"
 
 
-@beat
+@note
 @timeout(1.0)
-async def create_shipment(ctx: OrderContext) -> None:
+async def create_shipment(score: OrderScore) -> None:
     """Create shipment for the order."""
     await asyncio.sleep(0.02)
-    ctx.shipment_id = f"SHIP-{ctx.order_id}"
+    score.shipment_id = f"SHIP-{score.order_id}"
 
 
-@beat
-async def send_notifications(ctx: OrderContext) -> None:
+@note
+async def send_notifications(score: OrderScore) -> None:
     """Send order confirmation notifications."""
     await asyncio.sleep(0.01)
-    ctx.notifications_sent = True
+    score.notifications_sent = True
 
 
 # --- Cadence Definition ---
 
 
-def create_order_cadence(ctx: OrderContext, hooks: List[CadenceHooks]) -> Cadence[OrderContext]:
+def create_order_cadence(score: OrderScore, hooks: List[CadenceHooks]) -> Cadence[OrderScore]:
     """Create an order processing cadence with hooks."""
-    cadence = Cadence("process_order", ctx)
+    cadence = Cadence("process_order", score)
 
     # Add all hooks
     for hook in hooks:
@@ -230,13 +230,13 @@ async def demo_logging_hooks():
     print("DEMO: LoggingHooks")
     print("=" * 60 + "\n")
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-001",
         customer_id="CUST-123",
         items=[{"name": "Widget", "price": 29.99, "quantity": 2}],
     )
 
-    cadence = create_order_cadence(ctx, [LoggingHooks()])
+    cadence = create_order_cadence(score, [LoggingHooks()])
     result = await cadence.run()
 
     print(f"\nOrder processed: total=${result.total:.2f}")
@@ -248,14 +248,14 @@ async def demo_timing_hooks():
     print("DEMO: TimingHooks")
     print("=" * 60 + "\n")
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-002",
         customer_id="CUST-456",
         items=[{"name": "Gadget", "price": 99.99, "quantity": 1}],
     )
 
     timing = TimingHooks()
-    cadence = create_order_cadence(ctx, [timing])
+    cadence = create_order_cadence(score, [timing])
 
     await cadence.run()
 
@@ -272,18 +272,18 @@ async def demo_metrics_hooks():
     metrics = MetricsHooks()
 
     for i in range(5):
-        ctx = OrderContext(
+        score = OrderScore(
             order_id=f"ORD-{100 + i}",
             customer_id=f"CUST-{200 + i}",
             items=[{"name": f"Item-{i}", "price": 10.0 + i * 5, "quantity": 1}],
         )
 
         try:
-            cadence = create_order_cadence(ctx, [metrics])
+            cadence = create_order_cadence(score, [metrics])
             await cadence.run()
-            print(f"  ✓ Order {ctx.order_id} completed")
+            print(f"  ✓ Order {score.order_id} completed")
         except Exception as e:
-            print(f"  ✗ Order {ctx.order_id} failed: {e}")
+            print(f"  ✗ Order {score.order_id} failed: {e}")
 
     print("\nMetrics Summary:")
     import json
@@ -299,14 +299,14 @@ async def demo_custom_hooks():
     alerting = AlertingHooks(alert_threshold=2)
     audit = AuditHooks()
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-003",
         customer_id="CUST-789",
         items=[{"name": "Premium Widget", "price": 199.99, "quantity": 1}],
     )
 
     try:
-        cadence = create_order_cadence(ctx, [alerting, audit])
+        cadence = create_order_cadence(score, [alerting, audit])
         result = await cadence.run()
         print(f"\n✓ Order processed successfully")
     except Exception as e:
@@ -314,7 +314,7 @@ async def demo_custom_hooks():
 
     print("\nAudit Log:")
     for entry in audit.get_audit_log():
-        print(f"  {entry['event']}: {entry.get('beat') or entry.get('cadence')}")
+        print(f"  {entry['event']}: {entry.get('note') or entry.get('cadence')}")
 
 
 async def demo_debug_hooks():
@@ -323,13 +323,13 @@ async def demo_debug_hooks():
     print("DEMO: DebugHooks - Detailed Execution Trace")
     print("=" * 60)
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-004",
         customer_id="CUST-000",
         items=[{"name": "Debug Widget", "price": 49.99, "quantity": 3}],
     )
 
-    cadence = create_order_cadence(ctx, [DebugHooks(show_context=True, show_timing=True)])
+    cadence = create_order_cadence(score, [DebugHooks(show_context=True, show_timing=True)])
 
     try:
         await cadence.run()
@@ -346,7 +346,7 @@ async def demo_combined_hooks():
     timing = TimingHooks()
     metrics = MetricsHooks()
 
-    ctx = OrderContext(
+    score = OrderScore(
         order_id="ORD-005",
         customer_id="CUST-999",
         items=[
@@ -355,7 +355,7 @@ async def demo_combined_hooks():
         ],
     )
 
-    cadence = create_order_cadence(ctx, [
+    cadence = create_order_cadence(score, [
         LoggingHooks(),
         timing,
         metrics,

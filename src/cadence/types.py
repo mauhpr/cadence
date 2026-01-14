@@ -1,32 +1,32 @@
 """Type definitions for Cadence."""
 
 from collections.abc import Callable, Coroutine
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 
-# Context type variable - bound to any class
-ContextT = TypeVar("ContextT")
-ChildContextT = TypeVar("ChildContextT")
+# Score type variable - bound to any class
+ScoreT = TypeVar("ScoreT")
+ChildScoreT = TypeVar("ChildScoreT")
 
 # Task signatures
-SyncTask = Callable[[ContextT], None]
-AsyncTask = Callable[[ContextT], Coroutine[Any, Any, None]]
-Task = Union[SyncTask[ContextT], AsyncTask[ContextT]]
+SyncTask = Callable[[ScoreT], None]
+AsyncTask = Callable[[ScoreT], Coroutine[Any, Any, None]]
+Task = SyncTask[ScoreT] | AsyncTask[ScoreT]
 
 # Condition signatures (for branching)
-SyncCondition = Callable[[ContextT], bool]
-AsyncCondition = Callable[[ContextT], Coroutine[Any, Any, bool]]
-Condition = Union[SyncCondition[ContextT], AsyncCondition[ContextT]]
+SyncCondition = Callable[[ScoreT], bool]
+AsyncCondition = Callable[[ScoreT], Coroutine[Any, Any, bool]]
+Condition = SyncCondition[ScoreT] | AsyncCondition[ScoreT]
 
 # Interruptible task (can stop cadence)
-SyncInterruptible = Callable[[ContextT], bool | None]
-AsyncInterruptible = Callable[[ContextT], Coroutine[Any, Any, bool | None]]
-Interruptible = Union[SyncInterruptible[ContextT], AsyncInterruptible[ContextT]]
+SyncInterruptible = Callable[[ScoreT], bool | None]
+AsyncInterruptible = Callable[[ScoreT], Coroutine[Any, Any, bool | None]]
+Interruptible = SyncInterruptible[ScoreT] | AsyncInterruptible[ScoreT]
 
 # Merge task for child cadences
-SyncMerge = Callable[[ContextT, ChildContextT], None]
-AsyncMerge = Callable[[ContextT, ChildContextT], Coroutine[Any, Any, None]]
-Merge = Union[SyncMerge[ContextT, ChildContextT], AsyncMerge[ContextT, ChildContextT]]
+SyncMerge = Callable[[ScoreT, ChildScoreT], None]
+AsyncMerge = Callable[[ScoreT, ChildScoreT], Coroutine[Any, Any, None]]
+Merge = SyncMerge[ScoreT, ChildScoreT] | AsyncMerge[ScoreT, ChildScoreT]
 
 # Reporter callbacks
-TimeReporter = Callable[[str, float, ContextT], Any]
-ErrorHandler = Callable[[ContextT, Exception], Any]
+TimeReporter = Callable[[str, float, ScoreT], Any]
+ErrorHandler = Callable[[ScoreT, Exception], Any]
