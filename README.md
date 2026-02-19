@@ -6,9 +6,20 @@
 [![Tests](https://github.com/mauhpr/cadence/actions/workflows/test.yml/badge.svg)](https://github.com/mauhpr/cadence/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/mauhpr/cadence/branch/main/graph/badge.svg)](https://codecov.io/gh/mauhpr/cadence)
 
-**A declarative Python framework for building service logic with explicit control flow.**
+**A declarative Python framework for building service and AI orchestration logic with explicit control flow.**
 
-Cadence lets you build complex service orchestration with a clean, readable API. Define your business logic as composable notes, handle errors gracefully, and scale with confidence.
+Cadence lets you build complex orchestration — from checkout flows to LLM pipelines — with a clean, readable API. Define your business logic as composable notes, handle errors gracefully, and scale with confidence.
+
+## Why Cadence?
+
+| Challenge | How Cadence Helps |
+|-----------|-------------------|
+| Service orchestration is tangled in imperative code | Declarative `.then()` / `.sync()` / `.split()` chain makes the flow visible |
+| LLM APIs are unreliable | Built-in `@retry`, `@timeout`, `@fallback`, `@circuit_breaker` |
+| Parallel tool calling is error-prone | `.sync()` with automatic score isolation and merging |
+| Intent routing needs ugly if/else trees | `.split(condition, if_true, if_false)` keeps it clean |
+| LLMs hallucinate framework code | Constrained 4-method DSL is easy for models to generate correctly |
+| Frameworks lock you into their ecosystem | Zero dependencies — bring any LLM client, any HTTP library |
 
 ## Features
 
@@ -20,6 +31,8 @@ Cadence lets you build complex service orchestration with a clean, readable API.
 - **Observability** - Hooks for logging, metrics, and tracing
 - **Type Safety** - Full type hints and generics support
 - **Zero Dependencies** - Core library has no required dependencies
+- **LLM Pipeline Ready** - Natural fit for RAG, tool calling, multi-agent, and model fallback chains
+- **LLM-Friendly DSL** - Constrained grammar that LLMs can generate correctly with minimal hallucination
 
 ## Installation
 
@@ -84,6 +97,46 @@ cadence = (
 result = await cadence.run()
 print(f"Order {result.order_id}: {result.status}")
 ```
+
+### LLM Pipeline Example
+
+The same primitives work for AI pipelines — parallel retrieval, intent routing, resilience on model calls:
+
+```python
+from dataclasses import dataclass, field
+from cadence import Cadence, Score, note, retry, timeout, fallback
+
+@dataclass
+class RAGScore(Score):
+    query: str
+    context: list = field(default_factory=list)
+    answer: str = ""
+
+@note
+@timeout(5.0)
+async def retrieve(score: RAGScore):
+    score.context = await vector_db.search(score.query)
+
+@note
+@timeout(10.0)
+@fallback([])
+async def web_search(score: RAGScore):
+    score.context += await search_api.query(score.query)
+
+@note
+@retry(max_attempts=3, backoff="exponential")
+@timeout(30.0)
+async def generate(score: RAGScore):
+    score.answer = await llm.generate(score.query, context=score.context)
+
+rag = (
+    Cadence("rag", RAGScore(query="What is Cadence?"))
+    .sync("retrieve", [retrieve, web_search])   # parallel retrieval
+    .then("generate", generate)                  # LLM call with retry + timeout
+)
+```
+
+This is identical in shape to the service orchestration example above — same API, same resilience patterns, different domain.
 
 ## Core Concepts
 
