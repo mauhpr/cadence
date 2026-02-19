@@ -12,6 +12,7 @@ This document describes the architectural decisions and design philosophy behind
 - [Parallel Execution Model](#parallel-execution-model)
 - [Resilience Patterns](#resilience-patterns)
 - [Extensibility](#extensibility)
+- [LLM and Agent Workflows](#llm-and-agent-workflows)
 
 ---
 
@@ -378,16 +379,97 @@ def my_merge(original: Score, changes: list[dict]) -> None:
 
 ---
 
+## LLM and Agent Workflows
+
+Cadence's primitives map directly to common LLM orchestration patterns. Because the same `.then()`, `.sync()`, `.split()`, and `.child()` API handles both service orchestration and AI pipelines, there is nothing new to learn.
+
+### Pattern Mapping
+
+| LLM / Agent Pattern | Cadence Primitive | Example |
+|----------------------|-------------------|---------|
+| Parallel tool calling | `.sync()` | Call search, calculator, and code interpreter concurrently |
+| RAG (retrieve + generate) | `.sync()` → `.then()` | Parallel vector + web retrieval, then LLM generation |
+| Intent routing | `.split()` | Route to code-gen vs. factual-QA vs. summarisation |
+| Sub-agents | `.child()` | Code-gen agent, citation agent, each with own Score |
+| Model fallback | `@retry` + `@fallback` | Try GPT-4o → fall back to GPT-4o-mini |
+| Timeout on model APIs | `@timeout` | 30 s cap on generation calls |
+| Rate-limit protection | `@circuit_breaker` | Trip after 5 consecutive 429 s from the provider |
+
+### RAG Pipeline — ASCII Diagram
+
+```
+                       ┌──────────────┐
+                       │  User Query  │
+                       └──────┬───────┘
+                              │
+                    ┌─────────┴──────────┐
+                    │    .sync("retrieve")│
+                    │                     │
+               ┌────┴─────┐     ┌────────┴──────┐
+               │ VectorDB │     │  Web Search   │
+               └────┬─────┘     └────────┬──────┘
+                    │                     │
+                    └─────────┬───────────┘
+                              │
+                    ┌─────────┴──────────┐
+                    │ .then("classify")  │
+                    └─────────┬──────────┘
+                              │
+                    ┌─────────┴──────────┐
+                    │  .split("route")   │
+                    │                    │
+               ┌────┴─────┐     ┌───────┴──────┐
+               │ Code Gen │     │  Factual QA  │
+               └────┬─────┘     └───────┬──────┘
+                    │                    │
+                    └─────────┬──────────┘
+                              │
+                    ┌─────────┴──────────┐
+                    │ .child("citations")│
+                    └─────────┬──────────┘
+                              │
+                        ┌─────┴─────┐
+                        │  Answer   │
+                        └───────────┘
+```
+
+### Why Cadence Over LangChain / LangGraph
+
+| Dimension | Cadence | LangChain / LangGraph |
+|-----------|---------|----------------------|
+| Dependencies | **0** (stdlib only) | 50 + transitive deps |
+| Scope | Orchestration layer | Full LLM toolkit (models, memory, tools, …) |
+| Control flow | Explicit `.then()` / `.sync()` / `.split()` chain | Implicit graph edges or LCEL pipe operators |
+| Resilience | Built-in `@retry`, `@timeout`, `@fallback`, `@circuit_breaker` | Requires custom wrappers or tenacity |
+| Learning curve | ~30 min (4 primitives) | Hours–days (large surface area) |
+| LLM lock-in | **None** — bring any client | Tightly coupled to LangChain abstractions |
+
+Use Cadence **alongside** your preferred LLM client (OpenAI SDK, Anthropic SDK, llama-cpp, etc.) — it orchestrates the pipeline, not the model calls.
+
+### LLMs Generating Cadence Code
+
+Cadence's constrained grammar makes it an ideal target for LLM-generated code:
+
+- **Small API surface** — 4 chainable methods (`.then`, `.sync`, `.split`, `.child`) plus 4 decorators
+- **No hidden control flow** — every pipeline step is visible in the chain
+- **Dataclass scores** — standard Python, no framework-specific state containers
+- **Predictable structure** — `Cadence(name, score).then(…).sync(…).run()` is easy for models to pattern-match
+
+In practice, LLMs produce fewer hallucinated method names and invalid argument combinations compared to larger, more permissive frameworks.
+
+---
+
 ## Comparison with Alternatives
 
-| Feature | Cadence | Prefect | Temporal | Raw asyncio |
-|---------|---------|---------|----------|-------------|
-| In-process | ✓ | ✓ | ✗ | ✓ |
-| Distributed | ✗ | ✓ | ✓ | ✗ |
-| Zero deps | ✓ | ✗ | ✗ | ✓ |
-| Type safety | ✓ | ✓ | ✓ | Manual |
-| Resilience | Built-in | Built-in | Built-in | Manual |
-| Learning curve | Low | Medium | High | Low |
+| Feature | Cadence | Prefect | Temporal | LangChain | Raw asyncio |
+|---------|---------|---------|----------|-----------|-------------|
+| In-process | ✓ | ✓ | ✗ | ✓ | ✓ |
+| Distributed | ✗ | ✓ | ✓ | ✗ | ✗ |
+| Zero deps | ✓ | ✗ | ✗ | ✗ | ✓ |
+| Type safety | ✓ | ✓ | ✓ | Partial | Manual |
+| Resilience | Built-in | Built-in | Built-in | Manual | Manual |
+| LLM pipelines | ✓ | ✗ | ✗ | ✓ | Manual |
+| Learning curve | Low | Medium | High | Medium | Low |
 
 ### When to Use Cadence
 
@@ -395,6 +477,7 @@ def my_merge(original: Score, changes: list[dict]) -> None:
 ✓ API endpoint workflows
 ✓ Request/response pipelines
 ✓ Microservice business logic
+✓ LLM pipeline orchestration (RAG, tool calling, multi-agent)
 
 ### When NOT to Use Cadence
 
