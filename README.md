@@ -118,8 +118,8 @@ async def retrieve(score: RAGScore):
     score.context = await vector_db.search(score.query)
 
 @note
+@fallback(default=[], field="context")
 @timeout(10.0)
-@fallback([])
 async def web_search(score: RAGScore):
     score.context += await search_api.query(score.query)
 
@@ -235,7 +235,7 @@ async def slow_operation(score):
 ```python
 from cadence import fallback
 
-@fallback(default={"status": "unknown"})
+@fallback(default="unknown", field="status")
 @note
 async def get_status(score):
     score.status = await status_service.get(score.id)

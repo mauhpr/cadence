@@ -172,26 +172,25 @@ async def fetch_with_retry_and_timeout(score: DataFetchScore) -> None:
 
 
 @note
-@fallback({"source": "fallback", "data": "default_value"})
+@fallback(default={"source": "fallback", "data": "default_value"}, field="cache_result")
 async def fetch_with_fallback(score: DataFetchScore) -> None:
     """
     Fetch data with a fallback value on failure.
 
-    If the service fails, use a default value instead of failing.
+    If the service fails, the fallback sets cache_result directly on score.
     """
     print("  Fetching with fallback...")
     raise ConnectionError("Service unavailable")
-    score.cache_result = {"never": "reached"}  # This line won't execute
 
 
 @note
 @retry(max_attempts=2, delay=0.05)
-@fallback({"source": "cache", "stale": True})
+@fallback(default={"source": "cache", "stale": True}, field="cache_result")
 async def fetch_with_retry_then_fallback(score: DataFetchScore) -> None:
     """
     Try with retries first, then fall back to cache.
 
-    Retry twice, and if still failing, use stale cache data.
+    Retry twice, and if still failing, use stale cache data on score.
     """
     print("  Fetching with retry then fallback...")
     score.cache_result = await unreliable_svc.call()

@@ -20,10 +20,10 @@ from cadence import (
     Cadence,
     Score,
     TimingHooks,
+    fallback,
     note,
     retry,
     timeout,
-    fallback,
     to_mermaid,
 )
 
@@ -151,10 +151,10 @@ async def retrieve_from_vectors(score: LLMPipelineScore) -> None:
 
 
 @note
+@fallback(default=[], field="web_results")
 @timeout(10.0)
-@fallback([])
 async def retrieve_from_web(score: LLMPipelineScore) -> None:
-    """Search the web for supplementary context. Falls back to empty list."""
+    """Search the web for supplementary context. Non-critical — falls back to empty list."""
     score.web_results = await web_search.search(score.user_query)
 
 
@@ -216,11 +216,11 @@ async def generate_with_fallback(score: LLMPipelineScore) -> None:
 
 
 @note
+@fallback(default="", field="code")
 @retry(max_attempts=3, delay=0.05)
 @timeout(10.0)
-@fallback("")
 async def generate_code(score: CodeAgentScore) -> None:
-    """Generate code using the LLM. Falls back to empty string on failure."""
+    """Generate code using the LLM. Falls back to empty string after retries exhausted."""
     result = await primary_llm.generate(f"Write {score.language} code: {score.query}")
     score.code = result["text"]
 

@@ -139,6 +139,65 @@ class TestFallback:
         with pytest.raises(TypeError):
             await raise_type_error()
 
+    @pytest.mark.asyncio
+    async def test_fallback_field_sets_score_attribute(self):
+        """Test that field= sets the attribute on score when exception fires."""
+        @fallback(default=[], field="results")
+        async def fetch(score):
+            raise ConnectionError("unavailable")
+
+        class FakeScore:
+            results = None
+
+        score = FakeScore()
+        ret = await fetch(score)
+        assert score.results == []
+        assert ret is None
+
+    @pytest.mark.asyncio
+    async def test_fallback_field_with_handler(self):
+        """Test that field= works with a handler function."""
+        @fallback(field="status", handler=lambda e: f"error: {e}")
+        async def fetch(score):
+            raise ValueError("bad")
+
+        class FakeScore:
+            status = None
+
+        score = FakeScore()
+        ret = await fetch(score)
+        assert score.status == "error: bad"
+        assert ret is None
+
+    @pytest.mark.asyncio
+    async def test_fallback_field_not_used_on_success(self):
+        """Test that field= doesn't interfere when function succeeds."""
+        @fallback(default="fallback_val", field="data")
+        async def fetch(score):
+            score.data = "real_data"
+
+        class FakeScore:
+            data = None
+
+        score = FakeScore()
+        await fetch(score)
+        assert score.data == "real_data"
+
+    @pytest.mark.asyncio
+    async def test_fallback_field_sync_via_async_wrapper(self):
+        """Test field= with a sync function."""
+        @fallback(default=42, field="value")
+        def compute(score):
+            raise RuntimeError("crash")
+
+        class FakeScore:
+            value = None
+
+        score = FakeScore()
+        ret = compute(score)
+        assert score.value == 42
+        assert ret is None
+
 
 class TestCircuitBreaker:
     """Test circuit breaker decorator and class."""
@@ -406,6 +465,20 @@ class TestFallbackSyncFunctions:
 
         result = fail()
         assert result == "handled: oops"
+
+    def test_fallback_field_sync_sets_attribute(self):
+        """Test sync fallback with field= sets score attribute."""
+        @fallback(default={"cached": True}, field="cache_result")
+        def fetch(score):
+            raise ConnectionError("down")
+
+        class FakeScore:
+            cache_result = None
+
+        score = FakeScore()
+        ret = fetch(score)
+        assert score.cache_result == {"cached": True}
+        assert ret is None
 
 
 class TestFallbackAsyncWithHandler:

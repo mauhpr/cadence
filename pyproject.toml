@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cadence-orchestration"
-version = "0.4.3"
+version = "0.4.4"
 description = "A declarative Python framework for orchestrating service logic with rhythm and precision"
 readme = "README.md"
 license = "MIT"
