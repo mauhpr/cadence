@@ -12,6 +12,7 @@ from typing import (
     TypeVar,
 )
 
+from cadence.checkpoint import CheckpointHooks, CheckpointStore
 from cadence.exceptions import CadenceError, NoteError
 from cadence.hooks import CadenceHooks, HooksManager
 from cadence.nodes.base import Measure
@@ -88,6 +89,7 @@ class Cadence(Generic[ScoreT]):
         self._error_handler: ErrorHandler | None = None
         self._stop_on_error: bool = True
         self._hooks_manager: HooksManager = HooksManager()
+        self._checkpoint_hooks: CheckpointHooks | None = None
 
     @property
     def name(self) -> str:
@@ -167,10 +169,16 @@ class Cadence(Generic[ScoreT]):
         Returns:
             self for chaining
         """
+        task_names = [
+            task.name if isinstance(task, Note) else getattr(task, "__name__", f"{name}[{i}]")
+            for i, task in enumerate(tasks)
+        ]
         wrapped_tasks = [
             self._wrap_with_timing(f"{name}[{i}]", task) for i, task in enumerate(tasks)
         ]
-        measure = ParallelMeasure(self._score, name, wrapped_tasks, merge_strategy)
+        measure = ParallelMeasure(
+            self._score, name, wrapped_tasks, merge_strategy, task_names=task_names,
+        )
         self._measures.append(measure)
         return self
 
@@ -302,6 +310,43 @@ class Cadence(Generic[ScoreT]):
         self._hooks_manager.add(hooks)
         return self
 
+    def with_checkpoint(
+        self,
+        store: CheckpointStore,
+        run_id: str,
+    ) -> Cadence[ScoreT]:
+        """
+        Enable checkpointing for crash recovery.
+
+        On re-run with the same ``run_id``, completed measures are skipped
+        and the score is restored from the last checkpoint.
+
+        Args:
+            store: A CheckpointStore implementation (e.g. InMemoryCheckpointStore)
+            run_id: Unique identifier for this workflow run
+
+        Returns:
+            self for chaining
+
+        Example:
+            store = InMemoryCheckpointStore()
+            cadence = (
+                Cadence("disburse", score)
+                .with_checkpoint(store, run_id="order-123")
+                .then("validate", validate)
+                .then("charge", charge)
+            )
+            await cadence.run()
+        """
+        if self._checkpoint_hooks is not None:
+            raise CadenceError(
+                "with_checkpoint() called twice — only one checkpoint store per cadence",
+                code="CHECKPOINT_ALREADY_SET",
+            )
+        hooks = CheckpointHooks(store, run_id)
+        self._checkpoint_hooks = hooks
+        return self.with_hooks(hooks)
+
     async def run(self) -> ScoreT:
         """
         Execute the cadence.
@@ -315,10 +360,20 @@ class Cadence(Generic[ScoreT]):
         cadence_start = time.perf_counter()
         cadence_error: Exception | None = None
 
-        # Call before_cadence hooks
+        # Call before_cadence hooks (CheckpointHooks loads completed measures here)
         await self._hooks_manager.before_cadence(self._name, self._score)
 
+        # Determine which measures to skip (checkpoint resume)
+        completed = (
+            self._checkpoint_hooks.completed_measures
+            if self._checkpoint_hooks
+            else set()
+        )
+
         for measure in self._measures:
+            if measure.name in completed:
+                continue
+
             note_start = time.perf_counter()
 
             # Call before_note hooks

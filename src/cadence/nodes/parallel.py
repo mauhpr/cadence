@@ -8,6 +8,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypeVar, cast
 
+from cadence.exceptions import ParallelNoteError
 from cadence.nodes.base import Measure
 from cadence.note import Note
 from cadence.score import MergeStrategy, Score, merge_snapshots
@@ -49,10 +50,44 @@ class ParallelMeasure(Measure[ScoreT]):
         name: str,
         tasks: list[Callable[[ScoreT], Any]],
         merge_strategy: Callable[..., Any] = MergeStrategy.fail_on_conflict,
+        task_names: list[str] | None = None,
     ) -> None:
         super().__init__(score, name)
         self._tasks = tasks
         self._merge_strategy = merge_strategy
+        self._task_names = task_names or [
+            self._resolve_task_name(i, t) for i, t in enumerate(tasks)
+        ]
+
+    @staticmethod
+    def _resolve_task_name(index: int, task: Any) -> str:
+        """Extract a human-readable name from a task callable."""
+        if isinstance(task, Note):
+            return task.name
+        name: str | None = getattr(task, "__name__", None)
+        if name and name not in ("<lambda>", "timed_async", "timed_sync"):
+            return name
+        return f"task[{index}]"
+
+    async def _wrap_task_error(
+        self,
+        index: int,
+        task_name: str,
+        coro: Any,
+    ) -> Any:
+        """Wrap a coroutine to re-raise exceptions as ParallelNoteError."""
+        try:
+            return await coro
+        except ParallelNoteError:
+            raise
+        except Exception as e:
+            raise ParallelNoteError(
+                f"Task '{task_name}' in group '{self._name}' failed: {e}",
+                group_name=self._name,
+                task_index=index,
+                task_name=task_name,
+                original_error=e,
+            ) from e
 
     async def execute(self) -> bool | None:
         """Execute all tasks in parallel with isolated score snapshots."""
@@ -73,39 +108,40 @@ class ParallelMeasure(Measure[ScoreT]):
         score_as_score = cast(Score, self._score)
         snapshots: list[Any] = [score_as_score._snapshot() for _ in self._tasks]
 
-        # Separate async and sync tasks with their snapshots
-        async_tasks: list[Callable[..., Any]] = []
-        async_snapshots: list[Any] = []
-        sync_tasks: list[Callable[..., Any]] = []
-        sync_snapshots: list[Any] = []
+        # Separate async and sync tasks with their snapshots and indices
+        async_items: list[tuple[int, str, Callable[..., Any], Any]] = []
+        sync_items: list[tuple[int, str, Callable[..., Any], Any]] = []
 
-        for task, snapshot in zip(self._tasks, snapshots, strict=True):
+        for i, (task, snapshot) in enumerate(zip(self._tasks, snapshots, strict=True)):
+            name = self._task_names[i]
             if _is_async_callable(task):
-                async_tasks.append(task)
-                async_snapshots.append(snapshot)
+                async_items.append((i, name, task, snapshot))
             else:
-                sync_tasks.append(task)
-                sync_snapshots.append(snapshot)
+                sync_items.append((i, name, task, snapshot))
 
-        # Create coroutines for async tasks
+        # Create wrapped coroutines for async tasks
         async_coros = [
-            task(snapshot) for task, snapshot in zip(async_tasks, async_snapshots, strict=True)
+            self._wrap_task_error(idx, name, task(snapshot))
+            for idx, name, task, snapshot in async_items
         ]
 
-        # Run sync tasks in thread pool
-        if sync_tasks:
+        # Run sync tasks in thread pool, wrapped for error context
+        if sync_items:
             loop = asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=len(sync_tasks)) as executor:
+            with ThreadPoolExecutor(max_workers=len(sync_items)) as executor:
                 sync_futures = [
-                    loop.run_in_executor(executor, task, snapshot)
-                    for task, snapshot in zip(sync_tasks, sync_snapshots, strict=True)
+                    self._wrap_task_error(
+                        idx, name, loop.run_in_executor(executor, task, snapshot),
+                    )
+                    for idx, name, task, snapshot in sync_items
                 ]
-                # Wait for all tasks concurrently
                 await asyncio.gather(*async_coros, *sync_futures)
         elif async_coros:
             await asyncio.gather(*async_coros)
 
         # Merge all snapshots back into original score
+        async_snapshots = [s for _, _, _, s in async_items]
+        sync_snapshots = [s for _, _, _, s in sync_items]
         all_snapshots = async_snapshots + sync_snapshots
         merge_snapshots(score_as_score, all_snapshots, self._merge_strategy)
 
@@ -113,22 +149,29 @@ class ParallelMeasure(Measure[ScoreT]):
 
     async def _execute_direct(self) -> bool | None:
         """Execute without copy-on-write (legacy behavior for non-Score types)."""
-        async_tasks = []
-        sync_tasks = []
+        async_items: list[tuple[int, str, Callable[..., Any]]] = []
+        sync_items: list[tuple[int, str, Callable[..., Any]]] = []
 
-        for task in self._tasks:
+        for i, task in enumerate(self._tasks):
+            name = self._task_names[i]
             if _is_async_callable(task):
-                async_tasks.append(task)
+                async_items.append((i, name, task))
             else:
-                sync_tasks.append(task)
+                sync_items.append((i, name, task))
 
-        async_coros = [task(self._score) for task in async_tasks]
+        async_coros = [
+            self._wrap_task_error(idx, name, task(self._score))
+            for idx, name, task in async_items
+        ]
 
-        if sync_tasks:
+        if sync_items:
             loop = asyncio.get_running_loop()
-            with ThreadPoolExecutor(max_workers=len(sync_tasks)) as executor:
+            with ThreadPoolExecutor(max_workers=len(sync_items)) as executor:
                 sync_futures = [
-                    loop.run_in_executor(executor, task, self._score) for task in sync_tasks
+                    self._wrap_task_error(
+                        idx, name, loop.run_in_executor(executor, task, self._score),
+                    )
+                    for idx, name, task in sync_items
                 ]
                 await asyncio.gather(*async_coros, *sync_futures)
         elif async_coros:

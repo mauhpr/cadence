@@ -19,6 +19,7 @@ Cadence lets you build complex orchestration — from checkout flows to LLM pipe
 | Parallel tool calling is error-prone | `.sync()` with automatic score isolation and merging |
 | Intent routing needs ugly if/else trees | `.split(condition, if_true, if_false)` keeps it clean |
 | LLMs hallucinate framework code | Constrained 4-method DSL is easy for models to generate correctly |
+| Workflows crash mid-execution | `.with_checkpoint()` resumes from last successful step |
 | Frameworks lock you into their ecosystem | Zero dependencies — bring any LLM client, any HTTP library |
 
 ## Features
@@ -29,6 +30,8 @@ Cadence lets you build complex orchestration — from checkout flows to LLM pipe
 - **Resilience Patterns** - Built-in retry, timeout, fallback, and circuit breaker
 - **Framework Integration** - First-class support for FastAPI and Flask
 - **Observability** - Hooks for logging, metrics, and tracing
+- **Event-Driven Architecture** - Structured domain events with listener registration and async support
+- **Workflow Checkpointing** - Crash recovery with pluggable checkpoint stores
 - **Type Safety** - Full type hints and generics support
 - **Zero Dependencies** - Core library has no required dependencies
 - **LLM Pipeline Ready** - Natural fit for RAG, tool calling, multi-agent, and model fallback chains
@@ -345,6 +348,51 @@ cadence = (
 )
 ```
 
+## Event System
+
+React to cadence and note lifecycle events with structured listeners:
+
+```python
+from cadence.events import EventEmitter, NOTE_COMPLETED, CADENCE_FAILED
+
+emitter = EventEmitter()
+emitter.on(NOTE_COMPLETED, lambda e: print(f"{e.note_name} done in {e.duration:.2f}s"))
+emitter.on(CADENCE_FAILED, lambda e: alert(f"{e.cadence_name} failed: {e.error}"))
+emitter.on("*", lambda e: audit_log.write(e))  # wildcard for all events
+
+cadence = (
+    Cadence("checkout", OrderScore(order_id="ORD-123"))
+    .with_hooks(emitter)
+    .then("validate", validate_order)
+    .then("charge", process_payment)
+)
+await cadence.run()
+```
+
+Event types: `NOTE_STARTED`, `NOTE_COMPLETED`, `NOTE_FAILED`, `CADENCE_STARTED`, `CADENCE_COMPLETED`, `CADENCE_FAILED`.
+
+## Checkpointing
+
+Resume workflows from the last successful step after a crash:
+
+```python
+from cadence import Cadence
+from cadence.checkpoint import InMemoryCheckpointStore
+
+store = InMemoryCheckpointStore()
+
+cadence = (
+    Cadence("disburse", PaymentScore(order_id="ORD-123"))
+    .with_checkpoint(store, run_id="order-123")
+    .then("validate", validate)
+    .then("charge", charge)         # if it crashes here...
+    .then("disburse", disburse)
+)
+await cadence.run()  # ...re-run skips validate, resumes from charge
+```
+
+Implement the `CheckpointStore` protocol with Redis, a database, or any durable backend for production use.
+
 ## Cadence Diagrams
 
 Generate visual diagrams of your cadences:
@@ -436,6 +484,20 @@ async def handle_error(score, error):
     if isinstance(error, NoteError):
         logger.error(f"Note {error.note_name} failed: {error}")
         score.errors.append(str(error))
+```
+
+### Parallel Error Context
+
+Identify which task failed in a `.sync()` group:
+
+```python
+from cadence import ParallelNoteError
+
+try:
+    await cadence.run()
+except ParallelNoteError as e:
+    print(f"Task '{e.note_name}' (index {e.task_index}) "
+          f"in group '{e.group_name}' failed: {e.original_error}")
 ```
 
 ## Documentation

@@ -27,6 +27,13 @@ Complete API documentation for the Cadence framework.
 - [Exceptions](#exceptions)
 - [Atomic Types](#atomic-types)
 - [Integrations](#integrations)
+- [Events](#events)
+  - [EventEmitter](#eventemitter)
+  - [CadenceEvent](#cadenceevent)
+  - [Event Type Constants](#event-type-constants)
+- [Checkpointing](#checkpointing)
+  - [CheckpointStore](#checkpointstore)
+  - [InMemoryCheckpointStore](#inmemorycheckpointstore)
 
 ---
 
@@ -152,6 +159,26 @@ cadence.with_hooks(LoggingHooks()).with_hooks(TimingHooks())
 ```
 
 Multiple hooks can be added - they are called in order.
+
+**Returns:** `Cadence[ScoreT]`
+
+##### `.with_checkpoint(store, run_id)`
+
+Enable checkpointing for crash recovery.
+
+```python
+from cadence.checkpoint import InMemoryCheckpointStore
+
+store = InMemoryCheckpointStore()
+cadence.with_checkpoint(store, run_id="order-123")
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `store` | `CheckpointStore` | A checkpoint store implementation |
+| `run_id` | `str` | Unique identifier for this workflow run |
+
+On re-run with the same `run_id`, completed measures are skipped and the score is restored from the last checkpoint. Checkpoints auto-clear on successful completion.
 
 **Returns:** `Cadence[ScoreT]`
 
@@ -334,6 +361,7 @@ async def get_status(score):
 |-----------|------|-------------|
 | `default` | `Any` | Value to return on failure |
 | `handler` | `Callable` | Optional function to compute fallback |
+| `field` | `str` | `None` | Score attribute to set the fallback value on |
 | `exceptions` | `tuple` | Exception types to catch |
 
 ---
@@ -543,6 +571,30 @@ except NoteError as e:
 | `note_name` | `str` | Name of the failed note |
 | `original_error` | `Exception` | The underlying exception |
 
+### ParallelNoteError
+
+Exception raised when a task within a `.sync()` group fails. Subclass of `NoteError`.
+
+```python
+from cadence import ParallelNoteError
+
+try:
+    await cadence.run()
+except ParallelNoteError as e:
+    print(f"Group: {e.group_name}, Task: {e.note_name}, Index: {e.task_index}")
+    print(f"Original error: {e.original_error}")
+```
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `group_name` | `str` | Name of the `.sync()` group |
+| `task_index` | `int` | Zero-based index of the failed task |
+| `note_name` | `str` | Name of the specific failed task |
+| `original_error` | `Exception` | The underlying exception |
+| `code` | `str` | Always `"PARALLEL_NOTE_ERROR"` |
+
+Backward-compatible: `except NoteError` still catches `ParallelNoteError`.
+
 ---
 
 ## Atomic Types
@@ -625,6 +677,106 @@ dot_code = to_dot(my_cadence)
 # Save to file
 save_diagram(my_cadence, "diagram.svg", format="svg")
 ```
+
+---
+
+## Events
+
+### EventEmitter
+
+Hook that emits structured `CadenceEvent` objects during execution. Subclass of `CadenceHooks`.
+
+```python
+from cadence.events import EventEmitter, NOTE_COMPLETED
+
+emitter = EventEmitter()
+emitter.on(NOTE_COMPLETED, lambda e: print(e.note_name))
+cadence.with_hooks(emitter)
+```
+
+#### `.on(event_type, listener)`
+
+Register a listener for an event type. Use `"*"` for all events. Returns `self` for chaining.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `event_type` | `str` | Event type constant or `"*"` for wildcard |
+| `listener` | `Callable[[CadenceEvent], Any]` | Sync or async callable |
+
+#### `.off(event_type, listener)`
+
+Remove a previously registered listener. Returns `self` for chaining.
+
+### CadenceEvent
+
+Dataclass emitted to listeners.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `event_type` | `str` | One of the event type constants |
+| `cadence_name` | `str` | Name of the cadence |
+| `timestamp` | `float` | Unix timestamp (`time.time()`) |
+| `note_name` | `str \| None` | Name of the note (for note events) |
+| `duration` | `float \| None` | Execution duration in seconds |
+| `error` | `Exception \| None` | Error if the event is a failure |
+| `metadata` | `dict[str, Any]` | Arbitrary extra data |
+
+### Event Type Constants
+
+| Constant | Value | When Emitted |
+|----------|-------|--------------|
+| `NOTE_STARTED` | `"note.started"` | Before each note executes |
+| `NOTE_COMPLETED` | `"note.completed"` | After successful note |
+| `NOTE_FAILED` | `"note.failed"` | After note failure |
+| `CADENCE_STARTED` | `"cadence.started"` | Before cadence execution |
+| `CADENCE_COMPLETED` | `"cadence.completed"` | After successful cadence |
+| `CADENCE_FAILED` | `"cadence.failed"` | After cadence failure |
+
+Listener exceptions are logged and swallowed — a broken listener never crashes the cadence.
+
+---
+
+## Checkpointing
+
+### CheckpointStore
+
+Protocol for persisting cadence checkpoints. Implement with Redis, a database, or any durable store.
+
+```python
+from cadence.checkpoint import CheckpointStore
+
+class RedisCheckpointStore:
+    async def save_checkpoint(self, cadence_name, run_id, measure_name, measure_index, score_state) -> None: ...
+    async def get_completed_measures(self, cadence_name, run_id) -> set[str]: ...
+    async def get_last_score_state(self, cadence_name, run_id) -> dict[str, Any] | None: ...
+    async def clear_checkpoints(self, cadence_name, run_id) -> None: ...
+```
+
+Implementors must ensure `save_checkpoint` is atomic — partial writes must not leave inconsistent state.
+
+### InMemoryCheckpointStore
+
+In-memory implementation for development and testing. Not durable across process restarts.
+
+```python
+from cadence.checkpoint import InMemoryCheckpointStore
+
+store = InMemoryCheckpointStore()
+cadence.with_checkpoint(store, run_id="order-123")
+```
+
+### serialize_score / restore_score
+
+Utilities for score state serialization.
+
+```python
+from cadence.checkpoint import serialize_score, restore_score
+
+state = serialize_score(score)  # dict via dataclasses.asdict
+restore_score(score, state)     # sets attributes back
+```
+
+**Note:** Score fields must be JSON-friendly types. `Atomic`, `AtomicList`, `AtomicDict` wrappers contain `threading.Lock` and cannot be serialized.
 
 ---
 

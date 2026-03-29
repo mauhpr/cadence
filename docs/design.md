@@ -141,6 +141,10 @@ class OrderScore(Score):
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
 │  │ HooksManager│  │ Reporter    │  │ErrorHandler │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘    │
+│  ┌─────────────┐  ┌─────────────┐                     │
+│  │EventEmitter │  │Checkpoint   │                     │
+│  │             │  │Hooks        │                     │
+│  └─────────────┘  └─────────────┘                     │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────┐  ┌─────────────────┐
@@ -160,10 +164,13 @@ class OrderScore(Score):
 1. Cadence.run() called
    │
 2. ├─► before_cadence hooks
+   │    (checkpoint: restore score if resuming)
    │
 3. ├─► For each measure:
    │    │
    │    ├─► before_note hooks
+   │    │
+   │    ├─► Skip if checkpointed (measure already completed)
    │    │
    │    ├─► Execute measure
    │    │   • SingleMeasure: Run task
@@ -377,6 +384,30 @@ def my_merge(original: Score, changes: list[dict]) -> None:
     pass
 ```
 
+### Event System
+
+The `EventEmitter` is a `CadenceHooks` subclass that dispatches structured `CadenceEvent` objects to registered listeners:
+
+- **Typed events**: `NOTE_STARTED`, `NOTE_COMPLETED`, `NOTE_FAILED`, `CADENCE_STARTED`, `CADENCE_COMPLETED`, `CADENCE_FAILED`
+- **Wildcard listeners**: Register with `"*"` to receive all events
+- **Async listeners**: Both sync and async callables are supported
+- **Error isolation**: Listener exceptions are logged, never crash the cadence
+- **Composability**: Multiple emitters stack via `.with_hooks()`
+
+Use events for audit logging, metrics sidecar integration, or triggering external workflows.
+
+### Checkpointing
+
+Cadence supports optional workflow checkpointing via `.with_checkpoint(store, run_id)`:
+
+1. **Before execution**: Load completed measures and restore score from last checkpoint
+2. **Skip completed**: Measures in the completed set are skipped
+3. **After each note**: Save checkpoint with serialized score state
+4. **On success**: Clear all checkpoints for the run
+5. **On failure**: Checkpoints are preserved for resume
+
+The `CheckpointStore` protocol (4 async methods) can be implemented over Redis, SQL, or any durable store. This is **in-process** checkpointing, not distributed orchestration.
+
 ---
 
 ## LLM and Agent Workflows
@@ -484,7 +515,7 @@ In practice, LLMs produce fewer hallucinated method names and invalid argument c
 ✗ Long-running background jobs
 ✗ Distributed workflows across services
 ✗ Complex DAG scheduling
-✗ Workflow persistence/resumption
+✗ Distributed workflow persistence (use Temporal, Airflow for that)
 
 ---
 

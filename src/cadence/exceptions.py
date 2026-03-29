@@ -82,6 +82,42 @@ class TimeoutError(CadenceError):
         )
 
 
+class ParallelNoteError(NoteError):
+    """Error from a specific task within a parallel (.sync()) group.
+
+    Provides the group name, task index, and task-specific name
+    so callers can identify exactly which parallel task failed.
+
+    Inherits from NoteError, so ``except NoteError`` still catches it.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        group_name: str,
+        task_index: int,
+        task_name: str,
+        original_error: Exception | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            note_name=task_name,
+            original_error=original_error,
+            code="PARALLEL_NOTE_ERROR",
+        )
+        self._group_name = group_name
+        self._task_index = task_index
+
+    @property
+    def group_name(self) -> str:
+        return self._group_name
+
+    @property
+    def task_index(self) -> int:
+        return self._task_index
+
+
 class RetryExhaustedError(CadenceError):
     """All retry attempts failed."""
 

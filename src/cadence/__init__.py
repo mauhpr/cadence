@@ -24,6 +24,13 @@ Example:
 """
 
 from cadence.cadence import Cadence
+from cadence.checkpoint import (
+    CheckpointHooks,
+    CheckpointStore,
+    InMemoryCheckpointStore,
+    restore_score,
+    serialize_score,
+)
 from cadence.diagram import (
     print_cadence,
     render_svg,
@@ -31,7 +38,23 @@ from cadence.diagram import (
     to_dot,
     to_mermaid,
 )
-from cadence.exceptions import CadenceError, NoteError, RetryExhaustedError, TimeoutError
+from cadence.events import (
+    CADENCE_COMPLETED,
+    CADENCE_FAILED,
+    CADENCE_STARTED,
+    NOTE_COMPLETED,
+    NOTE_FAILED,
+    NOTE_STARTED,
+    CadenceEvent,
+    EventEmitter,
+)
+from cadence.exceptions import (
+    CadenceError,
+    NoteError,
+    ParallelNoteError,
+    RetryExhaustedError,
+    TimeoutError,
+)
 from cadence.hooks import (
     CadenceHooks,
     DebugHooks,
@@ -64,7 +87,7 @@ from cadence.score import (
     merge_snapshots,
 )
 
-__version__ = "0.4.4"
+__version__ = "0.5.0"
 
 __all__ = [
     # Core
@@ -90,6 +113,7 @@ __all__ = [
     # Exceptions
     "CadenceError",
     "NoteError",
+    "ParallelNoteError",
     "TimeoutError",
     "RetryExhaustedError",
     "CircuitOpenError",
@@ -111,6 +135,21 @@ __all__ = [
     "MetricsHooks",
     "TracingHooks",
     "DebugHooks",
+    # Events
+    "CadenceEvent",
+    "EventEmitter",
+    "NOTE_STARTED",
+    "NOTE_COMPLETED",
+    "NOTE_FAILED",
+    "CADENCE_STARTED",
+    "CADENCE_COMPLETED",
+    "CADENCE_FAILED",
+    # Checkpointing
+    "CheckpointStore",
+    "InMemoryCheckpointStore",
+    "CheckpointHooks",
+    "serialize_score",
+    "restore_score",
     # Diagrams
     "to_mermaid",
     "to_dot",
