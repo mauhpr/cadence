@@ -730,3 +730,119 @@ class TestHookIntegration:
         # Currently, hook exceptions propagate (may want to change this)
         with pytest.raises(RuntimeError, match="hook error"):
             await cadence.run()
+
+
+# =============================================================================
+# Test with_hooks accepting a list
+# =============================================================================
+
+
+class TestWithHooksList:
+    """Test that with_hooks accepts both a single hook and a list."""
+
+    @pytest.mark.asyncio
+    async def test_with_hooks_single(self, hooks_score: HooksTestScore) -> None:
+        """Single hook (existing behavior) still works."""
+        calls: list[str] = []
+
+        class TrackHooks(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                calls.append(note_name)
+
+        cadence = (
+            Cadence("test", hooks_score)
+            .with_hooks(TrackHooks())
+            .then("a", append_a)
+        )
+        await cadence.run()
+
+        assert calls == ["a"]
+
+    @pytest.mark.asyncio
+    async def test_with_hooks_list(self, hooks_score: HooksTestScore) -> None:
+        """A list of hooks should all be registered."""
+        calls_1: list[str] = []
+        calls_2: list[str] = []
+
+        class Track1(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                calls_1.append(note_name)
+
+        class Track2(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                calls_2.append(note_name)
+
+        cadence = (
+            Cadence("test", hooks_score)
+            .with_hooks([Track1(), Track2()])
+            .then("a", append_a)
+        )
+        await cadence.run()
+
+        assert calls_1 == ["a"]
+        assert calls_2 == ["a"]
+
+    @pytest.mark.asyncio
+    async def test_with_hooks_list_ordering(self, hooks_score: HooksTestScore) -> None:
+        """Hooks in a list should be called in order."""
+        order: list[int] = []
+
+        class First(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                order.append(1)
+
+        class Second(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                order.append(2)
+
+        class Third(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                order.append(3)
+
+        cadence = (
+            Cadence("test", hooks_score)
+            .with_hooks([First(), Second(), Third()])
+            .then("a", append_a)
+        )
+        await cadence.run()
+
+        assert order == [1, 2, 3]
+
+    @pytest.mark.asyncio
+    async def test_with_hooks_empty_list(self, hooks_score: HooksTestScore) -> None:
+        """An empty list should not break anything."""
+        cadence = (
+            Cadence("test", hooks_score)
+            .with_hooks([])
+            .then("a", append_a)
+        )
+        result = await cadence.run()
+
+        assert result.value == "A"
+
+    @pytest.mark.asyncio
+    async def test_with_hooks_mixed_single_and_list(self, hooks_score: HooksTestScore) -> None:
+        """Mixing .with_hooks(single) and .with_hooks(list) on the same cadence."""
+        calls: list[str] = []
+
+        class HookA(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                calls.append("A")
+
+        class HookB(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                calls.append("B")
+
+        class HookC(CadenceHooks):
+            async def before_note(self, note_name: str, score: Any) -> None:
+                calls.append("C")
+
+        cadence = (
+            Cadence("test", hooks_score)
+            .with_hooks(HookA())
+            .with_hooks([HookB(), HookC()])
+            .then("step", append_a)
+        )
+        await cadence.run()
+
+        assert calls == ["A", "B", "C"]

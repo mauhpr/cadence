@@ -153,12 +153,24 @@ The reporter is called after each note with:
 ##### `.with_hooks(hooks)`
 
 Add hooks for intercepting cadence and note execution.
+Accepts a single hook or a list of hooks.
 
 ```python
-cadence.with_hooks(LoggingHooks()).with_hooks(TimingHooks())
+# Single hook
+cadence.with_hooks(LoggingHooks())
+
+# List of hooks
+cadence.with_hooks([LoggingHooks(), TimingHooks(), MetricsHooks()])
+
+# Mix both styles
+cadence.with_hooks(LoggingHooks()).with_hooks([TimingHooks(), MetricsHooks()])
 ```
 
-Multiple hooks can be added - they are called in order.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `hooks` | `CadenceHooks \| list[CadenceHooks]` | A single hook or a list of hooks |
+
+Multiple hooks are called in registration order.
 
 **Returns:** `Cadence[ScoreT]`
 

@@ -290,15 +290,16 @@ class Cadence(Generic[ScoreT]):
 
     def with_hooks(
         self,
-        hooks: CadenceHooks,
+        hooks: CadenceHooks | list[CadenceHooks],
     ) -> Cadence[ScoreT]:
         """
         Add hooks for intercepting cadence and note execution.
 
         Multiple hooks can be added - they are called in order.
+        Accepts a single hook or a list of hooks.
 
         Args:
-            hooks: A CadenceHooks instance
+            hooks: A CadenceHooks instance or a list of them
 
         Returns:
             self for chaining
@@ -307,11 +308,15 @@ class Cadence(Generic[ScoreT]):
             cadence = (
                 Cadence("checkout", score)
                 .with_hooks(LoggingHooks())
-                .with_hooks(TimingHooks())
+                .with_hooks([TimingHooks(), MetricsHooks()])
                 .then("process", process)
             )
         """
-        self._hooks_manager.add(hooks)
+        if isinstance(hooks, list):
+            for hook in hooks:
+                self._hooks_manager.add(hook)
+        else:
+            self._hooks_manager.add(hooks)
         return self
 
     def with_checkpoint(
