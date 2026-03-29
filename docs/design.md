@@ -316,6 +316,8 @@ Attempt 3 → Fail → Wait delay * backoff²
 Attempt N → Fail → Raise exception
 ```
 
+Notes can also declare retry inline: `@note(retry=3)` or `@note(retry={"max_attempts": 3, "backoff": "exponential"})`.
+
 ### Circuit Breaker
 
 State machine for fault tolerance:
@@ -422,7 +424,7 @@ Cadence's primitives map directly to common LLM orchestration patterns. Because 
 | RAG (retrieve + generate) | `.sync()` → `.then()` | Parallel vector + web retrieval, then LLM generation |
 | Intent routing | `.split()` | Route to code-gen vs. factual-QA vs. summarisation |
 | Sub-agents | `.child()` | Code-gen agent, citation agent, each with own Score |
-| Model fallback | `@fallback(field=…)` + `@retry` | Try GPT-4o with retries → `@fallback` sets safe default on score |
+| Model fallback | `@note(fallback=…, retry=…)` | Try GPT-4o with retries → fallback sets safe default on score |
 | Timeout on model APIs | `@timeout` | 30 s cap on generation calls |
 | Rate-limit protection | `@circuit_breaker` | Trip after 5 consecutive 429 s from the provider |
 
