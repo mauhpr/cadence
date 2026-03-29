@@ -17,9 +17,6 @@ from cadence import (
     Cadence,
     Score,
     note,
-    retry,
-    timeout,
-    fallback,
     circuit_breaker,
     CircuitBreaker,
     CircuitState,
@@ -116,8 +113,8 @@ overloaded_svc = OverloadedService("OverloadedAPI")
 # --- Retry Pattern ---
 
 
-@note
-@retry(max_attempts=5, backoff="exponential", delay=0.1, max_delay=2.0)
+# Equivalent to: @note + @retry(max_attempts=5, backoff="exponential", delay=0.1, max_delay=2.0)
+@note(retry={"max_attempts": 5, "backoff": "exponential", "delay": 0.1, "max_delay": 2.0})
 async def fetch_with_retry(score: DataFetchScore) -> None:
     """
     Fetch data with automatic retries.
@@ -128,8 +125,8 @@ async def fetch_with_retry(score: DataFetchScore) -> None:
     score.primary_data = await unreliable_svc.call()
 
 
-@note
-@retry(max_attempts=3, backoff="linear", delay=0.2)
+# Equivalent to: @note + @retry(max_attempts=3, backoff="linear", delay=0.2)
+@note(retry={"max_attempts": 3, "backoff": "linear", "delay": 0.2})
 async def fetch_with_linear_retry(score: DataFetchScore) -> None:
     """
     Fetch data with linear backoff retries.
@@ -143,8 +140,8 @@ async def fetch_with_linear_retry(score: DataFetchScore) -> None:
 # --- Timeout Pattern ---
 
 
-@note
-@timeout(0.5)  # 500ms timeout
+# Equivalent to: @note + @timeout(0.5)
+@note(timeout=0.5)  # 500ms timeout
 async def fetch_with_timeout(score: DataFetchScore) -> None:
     """
     Fetch data with a strict timeout.
@@ -155,9 +152,8 @@ async def fetch_with_timeout(score: DataFetchScore) -> None:
     score.enrichment = await slow_svc.call(timeout_seconds=0.5)
 
 
-@note
-@retry(max_attempts=3, delay=0.1)
-@timeout(0.5)
+# Equivalent to: @note + @retry(max_attempts=3, delay=0.1) + @timeout(0.5)
+@note(retry={"max_attempts": 3, "delay": 0.1}, timeout=0.5)
 async def fetch_with_retry_and_timeout(score: DataFetchScore) -> None:
     """
     Combine retry with timeout.
@@ -171,8 +167,8 @@ async def fetch_with_retry_and_timeout(score: DataFetchScore) -> None:
 # --- Fallback Pattern ---
 
 
-@note
-@fallback(default={"source": "fallback", "data": "default_value"}, field="cache_result")
+# Equivalent to: @note + @fallback(default={"source": "fallback", "data": "default_value"}, field="cache_result")
+@note(fallback={"default": {"source": "fallback", "data": "default_value"}, "field": "cache_result"})
 async def fetch_with_fallback(score: DataFetchScore) -> None:
     """
     Fetch data with a fallback value on failure.
@@ -183,9 +179,8 @@ async def fetch_with_fallback(score: DataFetchScore) -> None:
     raise ConnectionError("Service unavailable")
 
 
-@note
-@retry(max_attempts=2, delay=0.05)
-@fallback(default={"source": "cache", "stale": True}, field="cache_result")
+# Equivalent to: @note + @retry(max_attempts=2, delay=0.05) + @fallback(default={"source": "cache", "stale": True}, field="cache_result")
+@note(retry={"max_attempts": 2, "delay": 0.05}, fallback={"default": {"source": "cache", "stale": True}, "field": "cache_result"})
 async def fetch_with_retry_then_fallback(score: DataFetchScore) -> None:
     """
     Try with retries first, then fall back to cache.
@@ -278,8 +273,8 @@ async def demo_fallback():
 
     score = DataFetchScore(request_id="fallback-demo")
 
-    @note
-    @fallback({"source": "default", "message": "Service unavailable"})
+    # Equivalent to: @note + @fallback({"source": "default", "message": "Service unavailable"})
+    @note(fallback={"default": {"source": "default", "message": "Service unavailable"}})
     async def always_fails(score: DataFetchScore) -> None:
         raise ConnectionError("Service down!")
 
@@ -339,10 +334,8 @@ async def demo_combined():
 
     score = DataFetchScore(request_id="combined-demo")
 
-    @note
-    @retry(max_attempts=3, delay=0.05)
-    @timeout(0.3)
-    @fallback({"source": "emergency_cache", "stale": True})
+    # Equivalent to: @note + @retry(max_attempts=3, delay=0.05) + @timeout(0.3) + @fallback({"source": "emergency_cache", "stale": True})
+    @note(retry={"max_attempts": 3, "delay": 0.05}, timeout=0.3, fallback={"default": {"source": "emergency_cache", "stale": True}})
     async def resilient_fetch(score: DataFetchScore) -> None:
         """A note with multiple resilience layers."""
         score.primary_data = await unreliable_svc.call()

@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any
 
 from flask import Flask, jsonify, request
 
-from cadence import Cadence, Score, note, retry, timeout, fallback
+from cadence import Cadence, Score, note
 from cadence.integrations.flask import CadenceBlueprint, cadence_route
 
 
@@ -140,9 +140,7 @@ facet_svc = FacetService()
 # --- Search Cadence Notes ---
 
 
-@note
-@retry(max_attempts=3, backoff="exponential")
-@timeout(2.0)
+@note(retry={"max_attempts": 3, "backoff": "exponential"}, timeout=2.0)
 async def search_products(score: ProductSearchScore) -> None:
     """Search for products matching the query."""
     score.products = await product_svc.search(
@@ -154,9 +152,7 @@ async def search_products(score: ProductSearchScore) -> None:
     score.total_count = len(score.products)
 
 
-@note
-@timeout(1.0)
-@fallback({})
+@note(timeout=1.0, fallback={"default": {}})
 async def fetch_facets(score: ProductSearchScore) -> None:
     """Fetch facets for filtering UI."""
     score.facets = await facet_svc.get_facets(score.query)
@@ -165,9 +161,7 @@ async def fetch_facets(score: ProductSearchScore) -> None:
 # --- Detail Cadence Notes ---
 
 
-@note
-@retry(max_attempts=2)
-@timeout(1.0)
+@note(retry=2, timeout=1.0)
 async def fetch_product(score: ProductDetailScore) -> None:
     """Fetch product details."""
     score.product = await product_svc.get_by_id(score.product_id)
@@ -175,25 +169,19 @@ async def fetch_product(score: ProductDetailScore) -> None:
         raise ValueError(f"Product not found: {score.product_id}")
 
 
-@note
-@timeout(2.0)
-@fallback([])
+@note(timeout=2.0, fallback={"default": []})
 async def fetch_reviews(score: ProductDetailScore) -> None:
     """Fetch product reviews."""
     score.reviews = await review_svc.get_reviews(score.product_id)
 
 
-@note
-@timeout(2.0)
-@fallback([])
+@note(timeout=2.0, fallback={"default": []})
 async def fetch_related(score: ProductDetailScore) -> None:
     """Fetch related products."""
     score.related = await product_svc.get_related(score.product_id)
 
 
-@note
-@timeout(1.0)
-@fallback({"in_stock": False, "quantity": 0})
+@note(timeout=1.0, fallback={"default": {"in_stock": False, "quantity": 0}})
 async def check_inventory(score: ProductDetailScore) -> None:
     """Check product inventory."""
     score.inventory = await inventory_svc.check_stock(score.product_id)

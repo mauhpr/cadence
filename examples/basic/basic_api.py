@@ -9,7 +9,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 
-from cadence import Cadence, Score, note, retry, timeout
+from cadence import Cadence, Score, note
 from cadence.reporters import console_reporter
 
 
@@ -67,23 +67,19 @@ recommendation_svc = RecommendationService()
 
 # --- Note Definitions ---
 
-@note
-@retry(max_attempts=3, backoff="exponential")
-@timeout(2.0)
+@note(retry={"max_attempts": 3, "backoff": "exponential"}, timeout=2.0)
 async def fetch_profile(score: DashboardScore) -> None:
     """Fetch user profile from user service."""
     score.profile = await user_svc.get_profile(score.user_id)
 
 
-@note
-@timeout(2.0)
+@note(timeout=2.0)
 async def fetch_preferences(score: DashboardScore) -> None:
     """Fetch user preferences."""
     score.preferences = await user_svc.get_preferences(score.user_id)
 
 
-@note
-@timeout(2.0)
+@note(timeout=2.0)
 async def fetch_notifications(score: DashboardScore) -> None:
     """Fetch unread notifications."""
     score.notifications = await notification_svc.get_unread(score.user_id)

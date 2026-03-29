@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-29
+
+### Added
+
+- **Inline resilience on `@note`**: Declare retry, timeout, and fallback directly on the note decorator
+  - `@note(retry=3, timeout=15.0)` — int/float shorthand for common cases
+  - `@note(retry={"max_attempts": 3, "backoff": "exponential"})` — dict for full control
+  - `@note(fallback={"default": None, "field": "result"})` — fallback with field
+  - New `Note.resilience` property for introspection
+  - New `Note.__repr__` shows resilience flags: `<Note: fetch [retry, timeout]>`
+  - Standalone `@retry`, `@timeout`, `@fallback` stacking still works
+
 ## [0.5.1] - 2026-03-29
 
 ### Changed
@@ -179,7 +191,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom Exceptions**: `CadenceError`, `NoteError`, `TimeoutError`, `RetryExhaustedError`
 - Basic test suite with pytest and pytest-asyncio
 
-[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mauhpr/cadence/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/mauhpr/cadence/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mauhpr/cadence/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/mauhpr/cadence/compare/v0.4.2...v0.4.3

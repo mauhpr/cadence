@@ -566,3 +566,216 @@ class TestGetCircuit:
         # Should return same instance on second call
         cb2 = get_circuit("new_test_circuit_12345")
         assert cb is cb2
+
+
+# =============================================================================
+# @note with inline resilience parameters
+# =============================================================================
+
+from dataclasses import dataclass
+from cadence import Cadence, Score, note, NoteError
+
+
+@dataclass
+class ResilienceScore(Score):
+    """Score for note resilience tests."""
+
+    value: str = ""
+    items: list[str] | None = None
+    attempts: int = 0
+
+
+class TestNoteResilience:
+    """Test @note with inline retry, timeout, fallback parameters."""
+
+    @pytest.mark.asyncio
+    async def test_retry_int_shorthand(self) -> None:
+        """@note(retry=3) retries on failure."""
+        call_count = 0
+
+        @note(retry=3)
+        async def flaky(score: ResilienceScore) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("fail")
+            score.value = "ok"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("flaky", flaky).run()
+        assert score.value == "ok"
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_timeout_float_shorthand(self) -> None:
+        """@note(timeout=0.05) times out slow tasks."""
+
+        @note(timeout=0.05)
+        async def slow(score: ResilienceScore) -> None:
+            await asyncio.sleep(10)
+
+        score = ResilienceScore()
+        score.__post_init__()
+        with pytest.raises(CadenceTimeoutError):
+            await Cadence("test", score).then("slow", slow).run()
+
+    @pytest.mark.asyncio
+    async def test_retry_dict_form(self) -> None:
+        """@note(retry={...}) passes full options."""
+        call_count = 0
+
+        @note(retry={"max_attempts": 2, "delay": 0.01, "jitter": False})
+        async def flaky(score: ResilienceScore) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ConnectionError("fail")
+            score.value = "ok"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("flaky", flaky).run()
+        assert score.value == "ok"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_timeout_dict_form(self) -> None:
+        """@note(timeout={...}) passes full options."""
+
+        @note(timeout={"seconds": 0.05})
+        async def slow(score: ResilienceScore) -> None:
+            await asyncio.sleep(10)
+
+        score = ResilienceScore()
+        score.__post_init__()
+        with pytest.raises(CadenceTimeoutError):
+            await Cadence("test", score).then("slow", slow).run()
+
+    @pytest.mark.asyncio
+    async def test_fallback_with_field(self) -> None:
+        """@note(fallback={...}) provides fallback on failure."""
+
+        @note(fallback={"default": ["fallback_item"], "field": "items"})
+        async def failing(score: ResilienceScore) -> None:
+            raise RuntimeError("boom")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("failing", failing).run()
+        assert score.items == ["fallback_item"]
+
+    @pytest.mark.asyncio
+    async def test_combined_retry_and_timeout(self) -> None:
+        """@note(retry=3, timeout=5.0) — retry wraps timeout."""
+        call_count = 0
+
+        @note(retry=3, timeout=5.0)
+        async def flaky(score: ResilienceScore) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ConnectionError("fail")
+            score.value = "ok"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("flaky", flaky).run()
+        assert score.value == "ok"
+
+    @pytest.mark.asyncio
+    async def test_all_three_combined(self) -> None:
+        """@note(retry=2, timeout=5.0, fallback={...}) — all three."""
+
+        @note(
+            retry={"max_attempts": 2, "delay": 0.01, "jitter": False},
+            timeout=5.0,
+            fallback={"default": "safe", "field": "value"},
+        )
+        async def always_fails(score: ResilienceScore) -> None:
+            raise RuntimeError("permanent failure")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("fails", always_fails).run()
+        # Fallback catches RetryExhaustedError
+        assert score.value == "safe"
+
+    @pytest.mark.asyncio
+    async def test_name_preserved_with_resilience(self) -> None:
+        """@note(name="custom", retry=3) preserves the custom name."""
+
+        @note(name="custom_name", retry=3)
+        async def my_func(score: ResilienceScore) -> None:
+            score.value = "ok"
+
+        assert my_func.name == "custom_name"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("custom_name", my_func).run()
+        assert score.value == "ok"
+
+    @pytest.mark.asyncio
+    async def test_bare_note_unchanged(self) -> None:
+        """@note without resilience params works as before."""
+
+        @note
+        async def simple(score: ResilienceScore) -> None:
+            score.value = "simple"
+
+        assert simple.resilience == {}
+        assert repr(simple) == "<Note: simple>"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("simple", simple).run()
+        assert score.value == "simple"
+
+    @pytest.mark.asyncio
+    async def test_note_with_name_only_unchanged(self) -> None:
+        """@note(name="foo") without resilience works as before."""
+
+        @note(name="foo")
+        async def my_func(score: ResilienceScore) -> None:
+            score.value = "named"
+
+        assert my_func.name == "foo"
+        assert my_func.resilience == {}
+
+    @pytest.mark.asyncio
+    async def test_is_async_correct_after_wrapping(self) -> None:
+        """is_async reflects the original function, not the wrapper."""
+
+        @note(retry=3, timeout=5.0)
+        async def async_func(score: ResilienceScore) -> None:
+            score.value = "async"
+
+        @note(retry=3)
+        def sync_func(score: ResilienceScore) -> None:
+            score.value = "sync"
+
+        assert async_func.is_async is True
+        assert sync_func.is_async is False
+
+    def test_resilience_property_introspection(self) -> None:
+        """resilience property returns normalized config."""
+
+        @note(retry=3, timeout=15.0, fallback={"default": None, "field": "x"})
+        async def full(score: ResilienceScore) -> None:
+            pass
+
+        assert full.resilience == {
+            "retry": {"max_attempts": 3},
+            "timeout": {"seconds": 15.0},
+            "fallback": {"default": None, "field": "x"},
+        }
+
+    def test_repr_with_resilience(self) -> None:
+        """repr shows resilience flags."""
+
+        @note(retry=3, timeout=5.0)
+        async def my_func(score: ResilienceScore) -> None:
+            pass
+
+        assert repr(my_func) == "<Note: my_func [retry, timeout]>"
