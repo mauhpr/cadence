@@ -779,3 +779,207 @@ class TestNoteResilience:
             pass
 
         assert repr(my_func) == "<Note: my_func [retry, timeout]>"
+
+    # --- Edge cases and interaction tests ---
+
+    @pytest.mark.asyncio
+    async def test_timeout_triggers_retry(self) -> None:
+        """Timeout on attempt 1 should trigger retry on attempt 2."""
+        call_count = 0
+
+        @note(retry={"max_attempts": 3, "delay": 0.01, "jitter": False}, timeout=0.1)
+        async def slow_then_fast(score: ResilienceScore) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                await asyncio.sleep(10)  # will timeout
+            score.value = "recovered"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", slow_then_fast).run()
+        assert score.value == "recovered"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_sync_function_with_retry(self) -> None:
+        """@note(retry=3) works on sync functions."""
+        call_count = 0
+
+        @note(retry=3)
+        def sync_flaky(score: ResilienceScore) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ValueError("sync fail")
+            score.value = "sync_ok"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", sync_flaky).run()
+        assert score.value == "sync_ok"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_retry_with_on_filter(self) -> None:
+        """@note(retry={..., 'on': (ConnectionError,)}) only retries matching exceptions."""
+
+        @note(retry={"max_attempts": 3, "delay": 0.01, "on": (ConnectionError,), "jitter": False})
+        async def wrong_error(score: ResilienceScore) -> None:
+            raise ValueError("not retryable")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        # ValueError is not in the retry `on` list, so it should NOT retry — just raise
+        with pytest.raises(Exception):
+            await Cadence("test", score).then("t", wrong_error).run()
+
+    @pytest.mark.asyncio
+    async def test_fallback_with_handler(self) -> None:
+        """@note(fallback={"handler": fn}) uses the handler function."""
+
+        @note(fallback={"handler": lambda e: f"caught: {e}", "field": "value"})
+        async def failing(score: ResilienceScore) -> None:
+            raise RuntimeError("oops")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", failing).run()
+        assert score.value == "caught: oops"
+
+    @pytest.mark.asyncio
+    async def test_fallback_with_on_filter(self) -> None:
+        """@note(fallback={"on": (ValueError,)}) only catches matching exceptions."""
+
+        @note(fallback={"default": "safe", "field": "value", "on": (ValueError,)})
+        async def wrong_error(score: ResilienceScore) -> None:
+            raise RuntimeError("not caught by fallback")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        # RuntimeError is not in fallback's `on` list — should propagate
+        with pytest.raises(Exception):
+            await Cadence("test", score).then("t", wrong_error).run()
+
+    @pytest.mark.asyncio
+    async def test_retry_exhaustion_without_fallback(self) -> None:
+        """When all retries fail and no fallback, RetryExhaustedError surfaces."""
+
+        @note(retry={"max_attempts": 2, "delay": 0.01, "jitter": False})
+        async def always_fails(score: ResilienceScore) -> None:
+            raise ConnectionError("permanent")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        with pytest.raises(RetryExhaustedError):
+            await Cadence("test", score).then("t", always_fails).run()
+
+    @pytest.mark.asyncio
+    async def test_description_preserved(self) -> None:
+        """@note(description="...", retry=3) preserves description."""
+
+        @note(description="Important task", retry=3)
+        async def my_task(score: ResilienceScore) -> None:
+            """Original docstring."""
+            score.value = "ok"
+
+        assert my_task.description == "Important task"
+        assert my_task.name == "my_task"
+
+    @pytest.mark.asyncio
+    async def test_in_parallel_sync(self) -> None:
+        """Resilient notes work correctly inside .sync()."""
+
+        @note(retry={"max_attempts": 2, "delay": 0.01, "jitter": False}, timeout=5.0)
+        async def task_a(score: ResilienceScore) -> None:
+            score.value = "a"
+
+        @note(timeout=5.0)
+        async def task_b(score: ResilienceScore) -> None:
+            score.items = ["b"]
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).sync("parallel", [task_a, task_b]).run()
+        assert score.value == "a"
+        assert score.items == ["b"]
+
+    def test_functools_metadata_preserved(self) -> None:
+        """__name__ and __doc__ are preserved after resilience wrapping."""
+
+        @note(retry=3, timeout=5.0)
+        async def documented_func(score: ResilienceScore) -> None:
+            """This is the docstring."""
+            pass
+
+        assert documented_func.__name__ == "documented_func"
+        assert documented_func.__doc__ == "This is the docstring."
+        # Note.name should also match
+        assert documented_func.name == "documented_func"
+
+    @pytest.mark.asyncio
+    async def test_integer_timeout(self) -> None:
+        """@note(timeout=5) with int (not float) works."""
+
+        @note(timeout=5)
+        async def quick(score: ResilienceScore) -> None:
+            score.value = "fast"
+
+        assert quick.resilience["timeout"] == {"seconds": 5.0}
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", quick).run()
+        assert score.value == "fast"
+
+    @pytest.mark.asyncio
+    async def test_retry_only_fallback_no_retry(self) -> None:
+        """@note(fallback=...) without retry — fallback catches directly."""
+
+        @note(fallback={"default": "fallback_val", "field": "value"})
+        async def fails_once(score: ResilienceScore) -> None:
+            raise RuntimeError("immediate fail")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", fails_once).run()
+        assert score.value == "fallback_val"
+
+    @pytest.mark.asyncio
+    async def test_timeout_only_no_retry(self) -> None:
+        """@note(timeout=0.05) without retry — just times out."""
+
+        @note(timeout=0.05)
+        async def slow(score: ResilienceScore) -> None:
+            await asyncio.sleep(10)
+
+        score = ResilienceScore()
+        score.__post_init__()
+        with pytest.raises(CadenceTimeoutError):
+            await Cadence("test", score).then("t", slow).run()
+
+    @pytest.mark.asyncio
+    async def test_resilience_does_not_affect_other_notes(self) -> None:
+        """Resilience on one note doesn't leak to others."""
+
+        @note(retry=3, timeout=5.0)
+        async def resilient(score: ResilienceScore) -> None:
+            score.value = "resilient"
+
+        @note
+        async def plain(score: ResilienceScore) -> None:
+            score.items = ["plain"]
+
+        assert resilient.resilience == {"retry": {"max_attempts": 3}, "timeout": {"seconds": 5.0}}
+        assert plain.resilience == {}
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await (
+            Cadence("test", score)
+            .then("r", resilient)
+            .then("p", plain)
+            .run()
+        )
+        assert score.value == "resilient"
+        assert score.items == ["plain"]
