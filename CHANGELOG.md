@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-28
+
+### Added
+
+- **Event System**: New `EventEmitter` hook and `CadenceEvent` dataclass for structured domain events
+  - Register listeners for specific event types (`note.started`, `note.completed`, `note.failed`, `cadence.started`, `cadence.completed`, `cadence.failed`) or use `"*"` wildcard
+  - Supports both sync and async listeners with error isolation
+  - Compose via `.with_hooks(emitter)` — stackable with other hooks
+- **Workflow Checkpointing**: New `CheckpointStore` protocol and `.with_checkpoint()` method for crash recovery
+  - On re-run with the same `run_id`, completed measures are skipped and score is restored
+  - Includes `InMemoryCheckpointStore` for development/testing
+  - Provides `serialize_score()` and `restore_score()` utilities
+  - Checkpoints auto-clear on successful cadence completion
+- **ParallelNoteError**: New exception for `.sync()` failures with task-level identification
+  - Properties: `group_name`, `task_index`, `note_name` (the specific task)
+  - Backward-compatible: `except NoteError` still catches parallel errors
+
+## [0.4.3] - 2026-02-19
+
+### Added
+
+- **`field=` parameter for `@fallback`**: Sets fallback value directly on the score attribute, matching how notes mutate state by side-effect
+
 ## [0.4.2] - 2025-01-14
 
 ### Added
@@ -148,7 +171,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom Exceptions**: `CadenceError`, `NoteError`, `TimeoutError`, `RetryExhaustedError`
 - Basic test suite with pytest and pytest-asyncio
 
-[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mauhpr/cadence/compare/v0.4.3...v0.5.0
+[0.4.3]: https://github.com/mauhpr/cadence/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/mauhpr/cadence/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/mauhpr/cadence/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mauhpr/cadence/compare/v0.3.0...v0.4.0
