@@ -298,8 +298,7 @@ from cadence import Cadence, LoggingHooks, TimingHooks
 
 cadence = (
     Cadence("monitored", MyScore())
-    .with_hooks(LoggingHooks())
-    .with_hooks(TimingHooks())
+    .with_hooks([LoggingHooks(), TimingHooks()])
     .then("note1", do_work)
 )
 ```
