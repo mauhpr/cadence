@@ -959,6 +959,103 @@ class TestNoteResilience:
             await Cadence("test", score).then("t", slow).run()
 
     @pytest.mark.asyncio
+    async def test_sync_function_with_timeout(self) -> None:
+        """@note(timeout=...) on a sync function."""
+
+        @note(timeout=5.0)
+        def sync_quick(score: ResilienceScore) -> None:
+            score.value = "sync_timeout_ok"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", sync_quick).run()
+        assert score.value == "sync_timeout_ok"
+
+    @pytest.mark.asyncio
+    async def test_sync_function_with_fallback(self) -> None:
+        """@note(fallback={...}) on a sync function."""
+
+        @note(fallback={"default": "sync_safe", "field": "value"})
+        def sync_fails(score: ResilienceScore) -> None:
+            raise RuntimeError("sync boom")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", sync_fails).run()
+        assert score.value == "sync_safe"
+
+    @pytest.mark.asyncio
+    async def test_sync_combined_retry_timeout(self) -> None:
+        """@note(retry=3, timeout=5.0) on a sync function — retry wraps timeout."""
+        call_count = 0
+
+        @note(retry=3, timeout=5.0)
+        def sync_flaky(score: ResilienceScore) -> None:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ConnectionError("sync fail")
+            score.value = "sync_combined_ok"
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", sync_flaky).run()
+        assert score.value == "sync_combined_ok"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_sync_all_three_combined(self) -> None:
+        """@note(retry=2, timeout=5.0, fallback={...}) on a sync function."""
+
+        @note(
+            retry={"max_attempts": 2, "delay": 0.01, "jitter": False},
+            timeout=5.0,
+            fallback={"default": "sync_safe", "field": "value"},
+        )
+        def sync_always_fails(score: ResilienceScore) -> None:
+            raise RuntimeError("sync permanent")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).then("t", sync_always_fails).run()
+        assert score.value == "sync_safe"
+
+    @pytest.mark.asyncio
+    async def test_sync_in_parallel(self) -> None:
+        """Sync resilient notes work inside .sync() parallel execution.
+
+        Note: sync @timeout uses SIGALRM which only works in the main thread,
+        so we test sync+retry (no timeout) in parallel here.
+        """
+
+        @note(retry=2)
+        def sync_a(score: ResilienceScore) -> None:
+            score.value = "sync_a"
+
+        @note(fallback={"default": ["sync_b"], "field": "items"})
+        def sync_b(score: ResilienceScore) -> None:
+            score.items = ["sync_b"]
+
+        score = ResilienceScore()
+        score.__post_init__()
+        await Cadence("test", score).sync("parallel", [sync_a, sync_b]).run()
+        assert score.value == "sync_a"
+        assert score.items == ["sync_b"]
+
+    @pytest.mark.asyncio
+    async def test_sync_retry_exhaustion(self) -> None:
+        """Sync function retry exhaustion raises RetryExhaustedError."""
+
+        @note(retry={"max_attempts": 2, "delay": 0.01, "jitter": False})
+        def sync_always_fails(score: ResilienceScore) -> None:
+            raise ConnectionError("sync permanent")
+
+        score = ResilienceScore()
+        score.__post_init__()
+        with pytest.raises(RetryExhaustedError):
+            await Cadence("test", score).then("t", sync_always_fails).run()
+
+    @pytest.mark.asyncio
     async def test_resilience_does_not_affect_other_notes(self) -> None:
         """Resilience on one note doesn't leak to others."""
 
