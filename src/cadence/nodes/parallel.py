@@ -131,7 +131,9 @@ class ParallelMeasure(Measure[ScoreT]):
             with ThreadPoolExecutor(max_workers=len(sync_items)) as executor:
                 sync_futures = [
                     self._wrap_task_error(
-                        idx, name, loop.run_in_executor(executor, task, snapshot),
+                        idx,
+                        name,
+                        loop.run_in_executor(executor, task, snapshot),
                     )
                     for idx, name, task, snapshot in sync_items
                 ]
@@ -160,8 +162,7 @@ class ParallelMeasure(Measure[ScoreT]):
                 sync_items.append((i, name, task))
 
         async_coros = [
-            self._wrap_task_error(idx, name, task(self._score))
-            for idx, name, task in async_items
+            self._wrap_task_error(idx, name, task(self._score)) for idx, name, task in async_items
         ]
 
         if sync_items:
@@ -169,7 +170,9 @@ class ParallelMeasure(Measure[ScoreT]):
             with ThreadPoolExecutor(max_workers=len(sync_items)) as executor:
                 sync_futures = [
                     self._wrap_task_error(
-                        idx, name, loop.run_in_executor(executor, task, self._score),
+                        idx,
+                        name,
+                        loop.run_in_executor(executor, task, self._score),
                     )
                     for idx, name, task in sync_items
                 ]

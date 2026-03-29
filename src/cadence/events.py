@@ -86,9 +86,7 @@ class EventEmitter(CadenceHooks):
         """Remove a listener. Returns self for chaining."""
         if event_type in self._listeners:
             self._listeners[event_type] = [
-                existing
-                for existing in self._listeners[event_type]
-                if existing is not listener
+                existing for existing in self._listeners[event_type] if existing is not listener
             ]
         return self
 
@@ -115,10 +113,12 @@ class EventEmitter(CadenceHooks):
 
     async def before_cadence(self, cadence_name: str, score: ScoreT) -> None:
         self._cadence_name = cadence_name
-        await self._emit(CadenceEvent(
-            event_type=CADENCE_STARTED,
-            cadence_name=cadence_name,
-        ))
+        await self._emit(
+            CadenceEvent(
+                event_type=CADENCE_STARTED,
+                cadence_name=cadence_name,
+            )
+        )
 
     async def after_cadence(
         self,
@@ -128,19 +128,23 @@ class EventEmitter(CadenceHooks):
         error: Exception | None = None,
     ) -> None:
         event_type = CADENCE_FAILED if error else CADENCE_COMPLETED
-        await self._emit(CadenceEvent(
-            event_type=event_type,
-            cadence_name=cadence_name,
-            duration=duration,
-            error=error,
-        ))
+        await self._emit(
+            CadenceEvent(
+                event_type=event_type,
+                cadence_name=cadence_name,
+                duration=duration,
+                error=error,
+            )
+        )
 
     async def before_note(self, note_name: str, score: ScoreT) -> None:
-        await self._emit(CadenceEvent(
-            event_type=NOTE_STARTED,
-            cadence_name=self._cadence_name,
-            note_name=note_name,
-        ))
+        await self._emit(
+            CadenceEvent(
+                event_type=NOTE_STARTED,
+                cadence_name=self._cadence_name,
+                note_name=note_name,
+            )
+        )
 
     async def after_note(
         self,
@@ -150,10 +154,12 @@ class EventEmitter(CadenceHooks):
         error: Exception | None = None,
     ) -> None:
         event_type = NOTE_FAILED if error else NOTE_COMPLETED
-        await self._emit(CadenceEvent(
-            event_type=event_type,
-            cadence_name=self._cadence_name,
-            note_name=note_name,
-            duration=duration,
-            error=error,
-        ))
+        await self._emit(
+            CadenceEvent(
+                event_type=event_type,
+                cadence_name=self._cadence_name,
+                note_name=note_name,
+                duration=duration,
+                error=error,
+            )
+        )

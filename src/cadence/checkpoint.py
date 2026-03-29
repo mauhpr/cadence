@@ -160,11 +160,7 @@ def serialize_score(score: Any) -> dict[str, Any]:
     """
     if dataclasses.is_dataclass(score) and not isinstance(score, type):
         return dataclasses.asdict(score)
-    return {
-        k: copy.deepcopy(v)
-        for k, v in vars(score).items()
-        if not k.startswith("_")
-    }
+    return {k: copy.deepcopy(v) for k, v in vars(score).items() if not k.startswith("_")}
 
 
 def restore_score(score: Any, state: dict[str, Any]) -> None:
@@ -208,12 +204,14 @@ class CheckpointHooks(CadenceHooks):
         self._cadence_name = cadence_name
         self._measure_index = 0
         self._completed = await self._store.get_completed_measures(
-            cadence_name, self._run_id,
+            cadence_name,
+            self._run_id,
         )
         # Restore score state if resuming
         if self._completed:
             last_state = await self._store.get_last_score_state(
-                cadence_name, self._run_id,
+                cadence_name,
+                self._run_id,
             )
             if last_state is not None:
                 restore_score(score, last_state)

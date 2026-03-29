@@ -177,7 +177,11 @@ class Cadence(Generic[ScoreT]):
             self._wrap_with_timing(f"{name}[{i}]", task) for i, task in enumerate(tasks)
         ]
         measure = ParallelMeasure(
-            self._score, name, wrapped_tasks, merge_strategy, task_names=task_names,
+            self._score,
+            name,
+            wrapped_tasks,
+            merge_strategy,
+            task_names=task_names,
         )
         self._measures.append(measure)
         return self
@@ -364,11 +368,7 @@ class Cadence(Generic[ScoreT]):
         await self._hooks_manager.before_cadence(self._name, self._score)
 
         # Determine which measures to skip (checkpoint resume)
-        completed = (
-            self._checkpoint_hooks.completed_measures
-            if self._checkpoint_hooks
-            else set()
-        )
+        completed = self._checkpoint_hooks.completed_measures if self._checkpoint_hooks else set()
 
         for measure in self._measures:
             if measure.name in completed:
