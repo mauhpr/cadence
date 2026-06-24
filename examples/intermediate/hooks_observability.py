@@ -15,8 +15,6 @@ from cadence import (
     Cadence,
     Score,
     note,
-    retry,
-    timeout,
     CadenceHooks,
     LoggingHooks,
     TimingHooks,
@@ -169,9 +167,7 @@ async def calculate_total(score: OrderScore) -> None:
     score.total = sum(item.get("price", 0) * item.get("quantity", 1) for item in score.items)
 
 
-@note
-@retry(max_attempts=3, backoff="exponential", base_delay=0.1)
-@timeout(2.0)
+@note(retry={"max_attempts": 3, "backoff": "exponential", "delay": 0.1}, timeout=2.0)
 async def process_payment(score: OrderScore) -> None:
     """Process payment - may fail randomly to demonstrate retries."""
     await asyncio.sleep(0.03)
@@ -183,8 +179,7 @@ async def process_payment(score: OrderScore) -> None:
     score.payment_status = "completed"
 
 
-@note
-@timeout(1.0)
+@note(timeout=1.0)
 async def create_shipment(score: OrderScore) -> None:
     """Create shipment for the order."""
     await asyncio.sleep(0.02)

@@ -119,20 +119,15 @@ class RAGScore(Score):
     context: list = field(default_factory=list)
     answer: str = ""
 
-@note
-@timeout(5.0)
+@note(timeout=5.0)
 async def retrieve(score: RAGScore):
     score.context = await vector_db.search(score.query)
 
-@note
-@fallback(default=[], field="context")
-@timeout(10.0)
+@note(fallback={"default": [], "field": "context"}, timeout=10.0)
 async def web_search(score: RAGScore):
     score.context += await search_api.query(score.query)
 
-@note
-@retry(max_attempts=3, backoff="exponential")
-@timeout(30.0)
+@note(retry={"max_attempts": 3, "backoff": "exponential"}, timeout=30.0)
 async def generate(score: RAGScore):
     score.answer = await llm.generate(score.query, context=score.context)
 
@@ -235,10 +230,9 @@ checkout_cadence = (
 ### Retry with Backoff
 
 ```python
-from cadence import retry
+from cadence import note
 
-@note
-@retry(max_attempts=3, delay=1.0, backoff="exponential")
+@note(retry={"max_attempts": 3, "delay": 1.0, "backoff": "exponential"})
 async def call_external_api(score):
     response = await http_client.get(score.api_url)
     score.data = response.json()
@@ -261,8 +255,7 @@ async def call_model(score):
 ```python
 from cadence import timeout
 
-@timeout(seconds=5.0)
-@note
+@note(timeout=5.0)
 async def slow_operation(score):
     score.result = await long_running_task()
 ```
@@ -274,8 +267,7 @@ async def slow_operation(score):
 ```python
 from cadence import fallback
 
-@fallback(default="unknown", field="status")
-@note
+@note(fallback={"default": "unknown", "field": "status"})
 async def get_status(score):
     score.status = await status_service.get(score.id)
 ```
@@ -290,6 +282,30 @@ from cadence import circuit_breaker
 async def call_fragile_service(score):
     score.data = await fragile_service.fetch()
 ```
+
+### Combined Resilience
+
+Combine retry, timeout, and fallback in a single decorator:
+
+```python
+from cadence import note
+
+# Shorthand — covers the common case
+@note(retry=3, timeout=15.0)
+async def call_service(score):
+    score.result = await external_api.call()
+
+# Full control via dicts
+@note(
+    retry={"max_attempts": 3, "backoff": "exponential", "delay": 0.5},
+    timeout=30.0,
+    fallback={"default": None, "field": "result"},
+)
+async def call_service(score):
+    score.result = await external_api.call()
+```
+
+Standalone decorators (`@retry`, `@timeout`, `@fallback`) still work for stacking when you need maximum flexibility.
 
 ## Framework Integration
 

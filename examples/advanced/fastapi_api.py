@@ -19,7 +19,7 @@ from typing import Any
 
 from pydantic import BaseModel, EmailStr
 
-from cadence import Cadence, Score, note, retry, timeout, fallback, LoggingHooks
+from cadence import Cadence, Score, note, LoggingHooks
 from cadence.integrations.fastapi import with_cadence, CadenceDependency
 
 # Conditional import for FastAPI
@@ -164,8 +164,7 @@ analytics_svc = AnalyticsService()
 # --- Note Definitions ---
 
 
-@note
-@timeout(1.0)
+@note(timeout=1.0)
 async def validate_email(score: RegistrationScore) -> None:
     """Validate email format and domain."""
     score.email_valid = await validation_svc.validate_email(score.email)
@@ -173,8 +172,7 @@ async def validate_email(score: RegistrationScore) -> None:
         score.errors.append("Email domain is not allowed")
 
 
-@note
-@timeout(1.0)
+@note(timeout=1.0)
 async def check_username_availability(score: RegistrationScore) -> None:
     """Check if username is available."""
     score.username_available = await validation_svc.check_username(score.username)
@@ -213,9 +211,7 @@ async def check_validation_results(score: RegistrationScore) -> bool | None:
     return None  # Continue
 
 
-@note
-@retry(max_attempts=3, backoff="exponential", delay=0.1)
-@timeout(2.0)
+@note(retry={"max_attempts": 3, "backoff": "exponential", "delay": 0.1}, timeout=2.0)
 async def create_user(score: RegistrationScore) -> None:
     """Create user in database."""
     score.user_id = await user_db.create_user(
@@ -227,9 +223,7 @@ async def create_user(score: RegistrationScore) -> None:
     score.user_created = True
 
 
-@note
-@retry(max_attempts=2)
-@timeout(3.0)
+@note(retry=2, timeout=3.0)
 async def send_verification_email(score: RegistrationScore) -> None:
     """Send email verification link."""
     if score.user_id:
@@ -238,9 +232,7 @@ async def send_verification_email(score: RegistrationScore) -> None:
         )
 
 
-@note
-@timeout(2.0)
-@fallback(False)
+@note(timeout=2.0, fallback={"default": False})
 async def send_welcome_email(score: RegistrationScore) -> None:
     """Send welcome email (non-critical)."""
     score.welcome_sent = await notification_svc.send_welcome_email(
@@ -248,8 +240,7 @@ async def send_welcome_email(score: RegistrationScore) -> None:
     )
 
 
-@note
-@fallback(None)
+@note(fallback={"default": None})
 async def track_analytics(score: RegistrationScore) -> None:
     """Track registration in analytics (non-critical)."""
     if score.user_id:

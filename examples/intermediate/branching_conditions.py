@@ -12,7 +12,7 @@ import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
 
-from cadence import Cadence, Score, note, retry, timeout
+from cadence import Cadence, Score, note
 
 
 # --- Enums and Types ---
@@ -172,9 +172,7 @@ async def set_premium_shipping(score: OrderScore) -> None:
     print(f"  Shipping: {score.shipping_method} ({score.estimated_days} days)")
 
 
-@note
-@retry(max_attempts=3)
-@timeout(2.0)
+@note(retry=3, timeout=2.0)
 async def process_credit_card(score: OrderScore) -> None:
     """Process credit card payment."""
     await asyncio.sleep(0.05)
@@ -182,9 +180,7 @@ async def process_credit_card(score: OrderScore) -> None:
     score.payment_processed = True
 
 
-@note
-@retry(max_attempts=3)
-@timeout(5.0)
+@note(retry=3, timeout=5.0)
 async def process_paypal(score: OrderScore) -> None:
     """Process PayPal payment."""
     await asyncio.sleep(0.08)
@@ -192,8 +188,7 @@ async def process_paypal(score: OrderScore) -> None:
     score.payment_processed = True
 
 
-@note
-@timeout(10.0)
+@note(timeout=10.0)
 async def process_bank_transfer(score: OrderScore) -> None:
     """Process bank transfer (takes longer)."""
     await asyncio.sleep(0.1)
@@ -201,9 +196,7 @@ async def process_bank_transfer(score: OrderScore) -> None:
     score.payment_processed = True
 
 
-@note
-@retry(max_attempts=5)
-@timeout(30.0)
+@note(retry=5, timeout=30.0)
 async def process_crypto(score: OrderScore) -> None:
     """Process cryptocurrency payment (may take time for confirmations)."""
     await asyncio.sleep(0.15)

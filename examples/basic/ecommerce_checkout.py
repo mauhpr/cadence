@@ -12,7 +12,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
-from cadence import Cadence, Score, note, retry, timeout, fallback
+from cadence import Cadence, Score, note
 from cadence.exceptions import CadenceError
 from cadence.reporters import console_reporter
 
@@ -106,8 +106,7 @@ notification_svc = NotificationService()
 
 # --- Payment Cadence Notes ---
 
-@note
-@retry(max_attempts=3, on=(ConnectionError,))
+@note(retry={"max_attempts": 3, "on": (ConnectionError,)})
 async def authorize_payment(score: PaymentScore) -> None:
     """Authorize the payment."""
     result = await payment_svc.authorize(score.amount, score.card_token)
@@ -117,15 +116,13 @@ async def authorize_payment(score: PaymentScore) -> None:
 
 # --- Checkout Cadence Notes ---
 
-@note
-@timeout(2.0)
+@note(timeout=2.0)
 async def fetch_user(score: CheckoutScore) -> None:
     """Fetch user details."""
     score.user = await user_svc.get(score.user_id)
 
 
-@note
-@timeout(2.0)
+@note(timeout=2.0)
 async def fetch_cart(score: CheckoutScore) -> None:
     """Fetch cart contents."""
     score.cart = await cart_svc.get(score.cart_id)

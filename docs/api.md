@@ -304,11 +304,12 @@ new_config = config.with_field("timeout", 60)
 
 ### @note
 
-Mark a function as a note (task) in a cadence.
+Mark a function as a note with optional inline resilience.
 
 ```python
 from cadence import note
 
+# Basic usage
 @note
 async def process_order(score: OrderScore) -> None:
     score.status = "processed"
@@ -317,18 +318,34 @@ async def process_order(score: OrderScore) -> None:
 async def charge_order(score: OrderScore) -> None:
     await payments.charge(score.order_id)
 
-@note(retry=2)
-async def retry_twice(score: OrderScore) -> None:
-    await api.call(score.order_id)
+# With resilience — shorthand
+@note(retry=3, timeout=15.0)
+async def call_api(score):
+    score.data = await api.fetch(score.id)
 
-@note(retry={"max_attempts": 3, "delay": 0.5, "backoff": "exponential"})
-async def retry_with_config(score: OrderScore) -> None:
-    await api.call(score.order_id)
+# With resilience — full control
+@note(
+    retry={"max_attempts": 3, "backoff": "exponential", "delay": 0.5},
+    timeout=30.0,
+    fallback={"default": None, "field": "data"},
+)
+async def call_api(score):
+    score.data = await api.fetch(score.id)
 ```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | `str` | `None` | Custom name for the note |
+| `description` | `str` | `None` | Description for documentation |
+| `retry` | `int \| dict` | `None` | Retry config: int for max_attempts, or dict for full options |
+| `timeout` | `float \| dict` | `None` | Timeout config: float for seconds, or dict for full options |
+| `fallback` | `dict` | `None` | Fallback config: dict with `default`, `field`, `handler`, `on` |
 
 The decorator preserves the callable signature for static type checkers and provides
 metadata for observability. `retry=2` is shorthand for `max_attempts=2`; pass a dict
 to use the full `cadence.retry()` configuration.
+
+Standalone `@retry`, `@timeout`, `@fallback` decorators still work for stacking.
 
 ---
 
@@ -357,6 +374,8 @@ async def call_api(score):
 When stacking with `@note`, put `@note` above `@retry` so the retry wrapper is part
 of the note callable.
 
+> **Tip:** You can also pass retry config directly to `@note(retry=3)` — see [@note](#note).
+
 ---
 
 ### @timeout
@@ -375,6 +394,8 @@ async def slow_operation(score):
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `seconds` | `float` | Maximum execution time |
+
+> **Tip:** You can also pass timeout config directly to `@note(timeout=15.0)` — see [@note](#note).
 
 **Raises:** `TimeoutError` if the operation exceeds the timeout.
 
@@ -399,6 +420,8 @@ async def get_status(score):
 | `handler` | `Callable` | Optional function to compute fallback |
 | `field` | `str` | `None` | Score attribute to set the fallback value on |
 | `exceptions` | `tuple` | Exception types to catch |
+
+> **Tip:** You can also pass fallback config directly to `@note(fallback={"default": [], "field": "items"})` — see [@note](#note).
 
 ---
 

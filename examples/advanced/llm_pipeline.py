@@ -20,10 +20,7 @@ from cadence import (
     Cadence,
     Score,
     TimingHooks,
-    fallback,
     note,
-    retry,
-    timeout,
     to_mermaid,
 )
 
@@ -143,16 +140,13 @@ web_search = MockWebSearch()
 # ---------------------------------------------------------------------------
 
 
-@note
-@timeout(5.0)
+@note(timeout=5.0)
 async def retrieve_from_vectors(score: LLMPipelineScore) -> None:
     """Search the vector database for relevant context."""
     score.vector_results = await vector_db.search(score.user_query)
 
 
-@note
-@fallback(default=[], field="web_results")
-@timeout(10.0)
+@note(timeout=10.0, fallback={"default": [], "field": "web_results"})
 async def retrieve_from_web(score: LLMPipelineScore) -> None:
     """Search the web for supplementary context. Non-critical — falls back to empty list."""
     score.web_results = await web_search.search(score.user_query)
@@ -163,9 +157,7 @@ async def retrieve_from_web(score: LLMPipelineScore) -> None:
 # ---------------------------------------------------------------------------
 
 
-@note
-@retry(max_attempts=2, delay=0.05)
-@timeout(3.0)
+@note(retry={"max_attempts": 2, "delay": 0.05}, timeout=3.0)
 async def classify_intent(score: LLMPipelineScore) -> None:
     """Classify user intent to route the pipeline."""
     query_lower = score.user_query.lower()
@@ -185,9 +177,7 @@ async def classify_intent(score: LLMPipelineScore) -> None:
 # ---------------------------------------------------------------------------
 
 
-@note
-@retry(max_attempts=3, backoff="exponential", delay=0.05)
-@timeout(30.0)
+@note(retry={"max_attempts": 3, "backoff": "exponential", "delay": 0.05}, timeout=30.0)
 async def generate_with_primary(score: LLMPipelineScore) -> None:
     """Generate answer with the primary model. Retries up to 3 times."""
     context = "\n".join(r["chunk"] for r in score.vector_results)
@@ -198,8 +188,7 @@ async def generate_with_primary(score: LLMPipelineScore) -> None:
     score.tokens_used = result["tokens"]
 
 
-@note
-@timeout(15.0)
+@note(timeout=15.0)
 async def generate_with_fallback(score: LLMPipelineScore) -> None:
     """Fallback generation with a smaller, more reliable model."""
     context = "\n".join(r["chunk"] for r in score.vector_results[:2])
@@ -215,10 +204,7 @@ async def generate_with_fallback(score: LLMPipelineScore) -> None:
 # ---------------------------------------------------------------------------
 
 
-@note
-@fallback(default="", field="code")
-@retry(max_attempts=3, delay=0.05)
-@timeout(10.0)
+@note(retry={"max_attempts": 3, "delay": 0.05}, timeout=10.0, fallback={"default": "", "field": "code"})
 async def generate_code(score: CodeAgentScore) -> None:
     """Generate code using the LLM. Falls back to empty string after retries exhausted."""
     result = await primary_llm.generate(f"Write {score.language} code: {score.query}")
@@ -237,8 +223,7 @@ async def validate_code(score: CodeAgentScore) -> None:
 # ---------------------------------------------------------------------------
 
 
-@note
-@timeout(5.0)
+@note(timeout=5.0)
 async def extract_citations(score: CitationScore) -> None:
     """Extract citations from the answer and match to sources."""
     await fallback_llm.generate(f"Cite sources for: {score.answer_text[:80]}")

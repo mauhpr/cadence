@@ -16,8 +16,6 @@ from cadence import (
     Cadence,
     Score,
     note,
-    timeout,
-    fallback,
     AtomicList,
     AtomicDict,
     MergeStrategy,
@@ -104,31 +102,25 @@ async def fetch_from_search(query: str) -> list[dict]:
 # --- Example 1: Basic Parallel Execution ---
 
 
-@note
-@timeout(1.0)
+@note(timeout=1.0)
 async def fetch_database(score: DataAggregationScore) -> None:
     """Fetch from database."""
     score.database_results = await fetch_from_database(score.query)
 
 
-@note
-@timeout(0.5)
+@note(timeout=0.5)
 async def fetch_cache(score: DataAggregationScore) -> None:
     """Fetch from cache."""
     score.cache_results = await fetch_from_cache(score.query)
 
 
-@note
-@timeout(2.0)
-@fallback([])
+@note(timeout=2.0, fallback={"default": []})
 async def fetch_api(score: DataAggregationScore) -> None:
     """Fetch from external API (with fallback on failure)."""
     score.api_results = await fetch_from_api(score.query)
 
 
-@note
-@timeout(1.5)
-@fallback([])
+@note(timeout=1.5, fallback={"default": []})
 async def fetch_search(score: DataAggregationScore) -> None:
     """Fetch from search engine (with fallback on failure)."""
     score.search_results = await fetch_from_search(score.query)
@@ -402,8 +394,7 @@ async def demo_parallel_error_handling():
         await asyncio.sleep(0.01)
         score.successful_tasks = ["task_1"]
 
-    @note
-    @fallback(None)
+    @note(fallback={"default": None})
     async def task_fails(score: ErrorDemoScore) -> None:
         await asyncio.sleep(0.02)
         raise ValueError("Simulated failure")
@@ -413,9 +404,7 @@ async def demo_parallel_error_handling():
         await asyncio.sleep(0.015)
         score.successful_tasks = ["task_2"]
 
-    @note
-    @fallback(None)  # Fallback wraps timeout to catch timeout errors
-    @timeout(0.001)  # Will timeout
+    @note(timeout=0.001, fallback={"default": None})  # Fallback catches timeout errors
     async def task_timeout(score: ErrorDemoScore) -> None:
         await asyncio.sleep(1.0)  # Too slow
 
