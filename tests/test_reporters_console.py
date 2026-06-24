@@ -9,7 +9,9 @@ Tests cover:
 """
 
 from dataclasses import dataclass
+import importlib
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -24,6 +26,7 @@ from cadence import Score
 @dataclass
 class ReporterTestScore(Score):
     """Score for reporter tests."""
+
     value: str = ""
     count: int = 0
 
@@ -34,6 +37,113 @@ def test_score() -> ReporterTestScore:
     score = ReporterTestScore()
     score.__post_init__()
     return score
+
+
+class FakeMetric:
+    """Small stand-in for Prometheus metric objects."""
+
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.label_calls = []
+        self.observations = []
+        self.increments = 0
+        self.decrements = 0
+
+    def labels(self, **labels):
+        self.label_calls.append(labels)
+        return self
+
+    def observe(self, value):
+        self.observations.append(value)
+
+    def inc(self):
+        self.increments += 1
+
+    def dec(self):
+        self.decrements += 1
+
+
+class FakeInstrument:
+    """Small stand-in for OpenTelemetry metric instruments."""
+
+    def __init__(self):
+        self.calls = []
+
+    def record(self, value, attributes=None):
+        self.calls.append(("record", value, attributes))
+
+    def add(self, value, attributes=None):
+        self.calls.append(("add", value, attributes))
+
+
+class FakeMeter:
+    def __init__(self):
+        self.histogram = FakeInstrument()
+        self.counter = FakeInstrument()
+
+    def create_histogram(self, **kwargs):
+        return self.histogram
+
+    def create_counter(self, **kwargs):
+        return self.counter
+
+
+class FakeSpan:
+    def __init__(self, name, attributes):
+        self.name = name
+        self.attributes = dict(attributes)
+        self.statuses = []
+        self.exceptions = []
+        self.events = []
+        self.ended = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return None
+
+    def set_attribute(self, key, value):
+        self.attributes[key] = value
+
+    def set_status(self, status):
+        self.statuses.append(status)
+
+    def record_exception(self, error):
+        self.exceptions.append(error)
+
+    def add_event(self, name, attributes=None):
+        self.events.append((name, attributes))
+
+    def end(self):
+        self.ended = True
+
+
+class FakeTracer:
+    def __init__(self):
+        self.spans = []
+
+    def start_as_current_span(self, name, attributes):
+        span = FakeSpan(name, attributes)
+        self.spans.append(span)
+        return span
+
+    def start_span(self, name, attributes):
+        span = FakeSpan(name, attributes)
+        self.spans.append(span)
+        return span
+
+
+class FakeStatus:
+    def __init__(self, code, description=None):
+        self.code = code
+        self.description = description
+
+
+class FakeStatusCode:
+    OK = "OK"
+    ERROR = "ERROR"
 
 
 # Note: We use pytest's built-in capsys fixture for stdout capture
@@ -188,16 +298,19 @@ class TestReporterExports:
     def test_console_reporter_exported(self):
         """console_reporter should be exported from reporters package."""
         from cadence.reporters import console_reporter
+
         assert callable(console_reporter)
 
     def test_json_reporter_exported(self):
         """json_reporter should be exported from reporters package."""
         from cadence.reporters import json_reporter
+
         assert callable(json_reporter)
 
     def test_all_list(self):
         """__all__ should include console and json reporters."""
         from cadence import reporters
+
         assert "console_reporter" in reporters.__all__
         assert "json_reporter" in reporters.__all__
 
@@ -248,6 +361,7 @@ class TestLazyImports:
 # Check if OpenTelemetry is available
 try:
     from opentelemetry import trace
+
     HAS_OTEL = True
 except ImportError:
     HAS_OTEL = False
@@ -260,6 +374,7 @@ class TestOpenTelemetryReporter:
     def test_otel_reporter_import(self):
         """OpenTelemetryReporter should be importable."""
         from cadence.reporters.opentelemetry import OpenTelemetryReporter
+
         assert OpenTelemetryReporter is not None
 
     def test_otel_reporter_init(self):
@@ -323,6 +438,7 @@ class TestOpenTelemetryReporter:
     def test_has_otel_flag(self):
         """HAS_OTEL should be True when OpenTelemetry is installed."""
         from cadence.reporters.opentelemetry import HAS_OTEL as OTEL_FLAG
+
         assert OTEL_FLAG is True
 
 
@@ -403,6 +519,7 @@ class TestOpenTelemetryNotInstalled:
 # Check if Prometheus is available
 try:
     from prometheus_client import Counter
+
     HAS_PROMETHEUS = True
 except ImportError:
     HAS_PROMETHEUS = False
@@ -415,6 +532,7 @@ class TestPrometheusReporter:
     def test_prometheus_reporter_import(self):
         """PrometheusReporter should be importable."""
         from cadence.reporters.prometheus import PrometheusReporter
+
         assert PrometheusReporter is not None
 
     def test_prometheus_reporter_init(self):
@@ -515,6 +633,7 @@ class TestPrometheusReporter:
     def test_has_prometheus_flag(self):
         """HAS_PROMETHEUS should be True when prometheus_client is installed."""
         from cadence.reporters.prometheus import HAS_PROMETHEUS as PROM_FLAG
+
         assert PROM_FLAG is True
 
 
@@ -600,6 +719,236 @@ class TestPrometheusNotInstalled:
             _check_prometheus()
 
 
+class TestOptionalReporterImportPaths:
+    """Tests for optional reporter paths without depending on installed extras."""
+
+    def test_opentelemetry_dynamic_import_success(self, monkeypatch, test_score):
+        """OpenTelemetry reporter should initialize from dynamically imported modules."""
+        import cadence.reporters.opentelemetry as otel_module
+
+        real_import_module = importlib.import_module
+        tracer = FakeTracer()
+        meter = FakeMeter()
+        fake_trace = SimpleNamespace(
+            Status=FakeStatus,
+            StatusCode=FakeStatusCode,
+            get_tracer=lambda name: tracer,
+        )
+        fake_metrics = SimpleNamespace(get_meter=lambda name: meter)
+
+        def fake_import_module(name, package=None):
+            if name == "opentelemetry.trace":
+                return fake_trace
+            if name == "opentelemetry.metrics":
+                return fake_metrics
+            return real_import_module(name, package)
+
+        monkeypatch.setattr(importlib, "import_module", fake_import_module)
+        otel_module = importlib.reload(otel_module)
+
+        try:
+            reporter = otel_module.OpenTelemetryReporter(include_state=True)
+            test_score.value = "visible"
+            test_score.count = 3
+            reporter("checkout:validate", 0.25, test_score)
+
+            span = tracer.spans[-1]
+            assert otel_module.HAS_OTEL is True
+            assert span.name == "checkout.validate"
+            assert span.attributes["cadence.flow.name"] == "checkout"
+            assert span.attributes["score.value"] == "visible"
+            assert meter.histogram.calls == [
+                ("record", 0.25, {"flow": "checkout", "step": "validate"})
+            ]
+            assert meter.counter.calls == [("add", 1, {"flow": "checkout", "step": "validate"})]
+
+            no_timing = otel_module.OpenTelemetryReporter(include_timing=False)
+            no_timing("plain_step", 0.1, test_score)
+            assert tracer.spans[-1].name == "flow.plain_step"
+
+            with otel_module.TracingContext("operation", {"request_id": "abc"}) as ctx:
+                ctx.set_attribute("inside", True)
+                ctx.add_event("done", {"ok": True})
+
+            context_span = tracer.spans[-1]
+            assert context_span.statuses[-1].code == FakeStatusCode.OK
+            assert context_span.ended is True
+            assert context_span.events == [("done", {"ok": True})]
+
+            with pytest.raises(ValueError):
+                with otel_module.TracingContext("operation-error"):
+                    raise ValueError("boom")
+
+            error_span = tracer.spans[-1]
+            assert error_span.statuses[-1].code == FakeStatusCode.ERROR
+            assert isinstance(error_span.exceptions[-1], ValueError)
+            assert callable(otel_module.opentelemetry_reporter("service", include_state=True))
+        finally:
+            monkeypatch.setattr(importlib, "import_module", real_import_module)
+            importlib.reload(otel_module)
+
+    def test_opentelemetry_dynamic_import_missing(self, monkeypatch):
+        """OpenTelemetry reporter should raise a clear error when unavailable."""
+        import cadence.reporters.opentelemetry as otel_module
+
+        real_import_module = importlib.import_module
+
+        def fake_import_module(name, package=None):
+            if name.startswith("opentelemetry."):
+                raise ImportError(name)
+            return real_import_module(name, package)
+
+        monkeypatch.setattr(importlib, "import_module", fake_import_module)
+        otel_module = importlib.reload(otel_module)
+
+        try:
+            assert otel_module.HAS_OTEL is False
+            with pytest.raises(ImportError, match="OpenTelemetry is required"):
+                otel_module._check_otel()
+        finally:
+            monkeypatch.setattr(importlib, "import_module", real_import_module)
+            importlib.reload(otel_module)
+
+    def test_opentelemetry_score_attribute_edges(self, monkeypatch):
+        """State attributes should skip private fields and tolerate bad getters."""
+        import cadence.reporters.opentelemetry as otel_module
+
+        real_import_module = importlib.import_module
+        tracer = FakeTracer()
+        meter = FakeMeter()
+        fake_trace = SimpleNamespace(
+            Status=FakeStatus,
+            StatusCode=FakeStatusCode,
+            get_tracer=lambda name: tracer,
+        )
+        fake_metrics = SimpleNamespace(get_meter=lambda name: meter)
+
+        def fake_import_module(name, package=None):
+            if name == "opentelemetry.trace":
+                return fake_trace
+            if name == "opentelemetry.metrics":
+                return fake_metrics
+            return real_import_module(name, package)
+
+        class ExplodingScore:
+            __dataclass_fields__ = {
+                "_secret": object(),
+                "name": object(),
+                "empty": object(),
+                "complex_value": object(),
+                "bad": object(),
+            }
+            _secret = "hidden"
+            name = "score-name"
+            empty = None
+            complex_value = ["not", "a", "span", "attribute"]
+
+            @property
+            def bad(self):
+                raise RuntimeError("cannot inspect")
+
+        monkeypatch.setattr(importlib, "import_module", fake_import_module)
+        otel_module = importlib.reload(otel_module)
+
+        try:
+            reporter = otel_module.OpenTelemetryReporter(include_state=True)
+            reporter("step", 0.1, ExplodingScore())
+
+            attributes = tracer.spans[-1].attributes
+            assert "score._secret" not in attributes
+            assert attributes["score.name"] == "score-name"
+            assert attributes["score.empty"] == "null"
+            assert "score.complex_value" not in attributes
+            assert "score.bad" not in attributes
+        finally:
+            monkeypatch.setattr(importlib, "import_module", real_import_module)
+            importlib.reload(otel_module)
+
+    @pytest.mark.asyncio
+    async def test_prometheus_dynamic_import_success(self, monkeypatch, test_score):
+        """Prometheus reporter should initialize from dynamically imported modules."""
+        import cadence.reporters.prometheus as prom_module
+
+        real_import_module = importlib.import_module
+        metrics_requests = []
+
+        async def metrics_app(scope, receive, send):
+            metrics_requests.append((scope, await receive()))
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b"metrics"})
+
+        fake_client = SimpleNamespace(
+            Counter=FakeMetric,
+            Gauge=FakeMetric,
+            Histogram=FakeMetric,
+            make_asgi_app=lambda: metrics_app,
+        )
+
+        def fake_import_module(name, package=None):
+            if name == "prometheus_client":
+                return fake_client
+            return real_import_module(name, package)
+
+        monkeypatch.setattr(importlib, "import_module", fake_import_module)
+        prom_module = importlib.reload(prom_module)
+
+        try:
+            reporter = prom_module.PrometheusReporter(prefix="unit")
+            reporter("checkout:TOTAL", 0.4, test_score)
+            reporter("fetch[0]", 0.2, test_score)
+            reporter.record_error("checkout", "fetch", ValueError("boom"))
+            reporter.flow_started("checkout")
+
+            assert prom_module.HAS_PROMETHEUS is True
+            assert prom_module._flow_duration.observations == [0.4]
+            assert prom_module._step_duration.observations == [0.2]
+            assert prom_module._step_errors.increments == 1
+            assert prom_module._step_count.increments == 2
+            assert prom_module._active_flows.increments == 1
+            assert prom_module._active_flows.decrements == 1
+            assert callable(prom_module.prometheus_reporter("unit", track_active_flows=False))
+
+            responses = []
+
+            async def send(message):
+                responses.append(message)
+
+            async def wrapped_app(scope, receive, send):
+                raise AssertionError("metrics request should not reach wrapped app")
+
+            middleware = prom_module.MetricsMiddleware(wrapped_app)
+            await middleware({"type": "http", "path": "/metrics"}, None, send)
+
+            assert metrics_requests[0][0]["headers"] == []
+            assert metrics_requests[0][1]["type"] == "http.request"
+            assert responses[-1]["body"] == b"metrics"
+        finally:
+            monkeypatch.setattr(importlib, "import_module", real_import_module)
+            importlib.reload(prom_module)
+
+    def test_prometheus_dynamic_import_missing(self, monkeypatch):
+        """Prometheus reporter should raise a clear error when unavailable."""
+        import cadence.reporters.prometheus as prom_module
+
+        real_import_module = importlib.import_module
+
+        def fake_import_module(name, package=None):
+            if name == "prometheus_client":
+                raise ImportError(name)
+            return real_import_module(name, package)
+
+        monkeypatch.setattr(importlib, "import_module", fake_import_module)
+        prom_module = importlib.reload(prom_module)
+
+        try:
+            assert prom_module.HAS_PROMETHEUS is False
+            with pytest.raises(ImportError, match="prometheus_client is required"):
+                prom_module._check_prometheus()
+        finally:
+            monkeypatch.setattr(importlib, "import_module", real_import_module)
+            importlib.reload(prom_module)
+
+
 # =============================================================================
 # Test: Reporter Integration with Cadence
 # =============================================================================
@@ -619,9 +968,7 @@ class TestReporterIntegration:
             score.value = "processed"
 
         cadence = (
-            Cadence("test", test_score)
-            .with_reporter(console_reporter)
-            .then("process", process)
+            Cadence("test", test_score).with_reporter(console_reporter).then("process", process)
         )
 
         await cadence.run()
@@ -640,11 +987,7 @@ class TestReporterIntegration:
         async def process(score: ReporterTestScore) -> None:
             score.value = "processed"
 
-        cadence = (
-            Cadence("test", test_score)
-            .with_reporter(json_reporter)
-            .then("process", process)
-        )
+        cadence = Cadence("test", test_score).with_reporter(json_reporter).then("process", process)
 
         await cadence.run()
 
@@ -669,9 +1012,7 @@ class TestReporterIntegration:
             score.value = "processed"
 
         cadence = (
-            Cadence("test", test_score)
-            .with_reporter(tracking_reporter)
-            .then("process", process)
+            Cadence("test", test_score).with_reporter(tracking_reporter).then("process", process)
         )
 
         await cadence.run()
@@ -695,9 +1036,7 @@ class TestReporterIntegration:
             await asyncio.sleep(0.05)  # 50ms
 
         cadence = (
-            Cadence("test", test_score)
-            .with_reporter(tracking_reporter)
-            .then("slow", slow_process)
+            Cadence("test", test_score).with_reporter(tracking_reporter).then("slow", slow_process)
         )
 
         await cadence.run()
@@ -725,9 +1064,7 @@ class TestReporterIntegration:
             score.value = "processed"
 
         cadence = (
-            Cadence("test", test_score)
-            .with_reporter(tracking_reporter)
-            .then("process", process)
+            Cadence("test", test_score).with_reporter(tracking_reporter).then("process", process)
         )
 
         await cadence.run()

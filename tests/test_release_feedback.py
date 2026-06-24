@@ -18,6 +18,12 @@ class FeedbackScore(Score):
     skipped: bool = False
 
 
+@dataclass
+class PlainFeedbackScore:
+    value: int = 0
+    skipped: bool = False
+
+
 @note
 async def increment(score: FeedbackScore) -> None:
     score.value += 1
@@ -56,6 +62,36 @@ def test_note_supports_retry_config_form() -> None:
     assert step.name == "step"
 
 
+def test_note_records_inline_resilience_metadata() -> None:
+    """Inline resilience options should be normalized for introspection."""
+
+    @note(
+        name="resilient",
+        retry={"max_attempts": 2, "delay": 0, "jitter": False},
+        timeout={"seconds": 0.5},
+        fallback={"default": None, "field": "skipped"},
+    )
+    async def step(score: FeedbackScore) -> None:
+        score.value += 1
+
+    assert step.name == "resilient"
+    assert step.resilience == {
+        "retry": {"max_attempts": 2, "delay": 0, "jitter": False},
+        "timeout": {"seconds": 0.5},
+        "fallback": {"default": None, "field": "skipped"},
+    }
+    assert repr(step) == "<Note: resilient [retry, timeout, fallback]>"
+
+
+def test_skip_exception_exposes_reason() -> None:
+    """Skip should expose the short-circuit reason in structured fields."""
+    skip = Skip("duplicate")
+
+    assert skip.reason == "duplicate"
+    assert skip.code == "SKIP"
+    assert skip.details == {"reason": "duplicate"}
+
+
 @pytest.mark.asyncio
 async def test_split_accepts_single_task_for_each_branch() -> None:
     """The common one-task branch case should not require list wrapping."""
@@ -70,6 +106,21 @@ async def test_split_accepts_single_task_for_each_branch() -> None:
     result = await cadence.run()
 
     assert result.value == 2
+
+
+@pytest.mark.asyncio
+async def test_split_accepts_missing_false_branch() -> None:
+    """False branches should be optional when only the true branch does work."""
+    score = FeedbackScore(value=-1)
+    cadence = (
+        Cadence("test", score)
+        .split("route", condition=is_positive, if_true=increment)
+        .then("after", increment)
+    )
+
+    result = await cadence.run()
+
+    assert result.value == 0
 
 
 @pytest.mark.asyncio
@@ -91,6 +142,28 @@ async def test_skip_stops_cadence_cleanly() -> None:
         .then("dedupe", dedupe)
         .then("increment", increment)
         .run()
+    )
+
+    assert result.skipped is True
+    assert result.value == 0
+
+
+@pytest.mark.asyncio
+async def test_skip_from_parallel_group_stops_cadence_cleanly() -> None:
+    """Skip raised inside a parallel task should not be wrapped as an error."""
+
+    @note
+    async def dedupe(score: PlainFeedbackScore) -> None:
+        score.skipped = True
+        raise Skip("duplicate")
+
+    @note
+    async def increment_plain(score: PlainFeedbackScore) -> None:
+        score.value += 1
+
+    score = PlainFeedbackScore()
+    result = await (
+        Cadence("test", score).sync("dedupe", [dedupe]).then("after", increment_plain).run()
     )
 
     assert result.skipped is True
