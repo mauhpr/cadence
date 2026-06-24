@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from importlib import import_module
 from typing import Any, TypeVar
 
 PrometheusCounter: Any = None
 PrometheusGauge: Any = None
 PrometheusHistogram: Any = None
+_prometheus_client: Any = None
 
 try:
-    from prometheus_client import Counter as PrometheusCounter
-    from prometheus_client import Gauge as PrometheusGauge
-    from prometheus_client import Histogram as PrometheusHistogram
+    _prometheus_client = import_module("prometheus_client")
+    PrometheusCounter = _prometheus_client.Counter
+    PrometheusGauge = _prometheus_client.Gauge
+    PrometheusHistogram = _prometheus_client.Histogram
 
     HAS_PROMETHEUS = True
 except ImportError:
@@ -257,11 +260,10 @@ class MetricsMiddleware:
         path: str = "/metrics",
     ) -> None:
         _check_prometheus()
-        from prometheus_client import make_asgi_app
 
         self.app = app
         self.path = path
-        self._metrics_app = make_asgi_app()
+        self._metrics_app = _prometheus_client.make_asgi_app()
 
     async def __call__(
         self,

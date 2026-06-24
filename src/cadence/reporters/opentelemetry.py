@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from importlib import import_module
 from typing import Any, TypeVar
 
 otel_trace: Any = None
 otel_get_meter: Any = None
-OtelSpan: Any = None
 OtelStatus: Any = None
 OtelStatusCode: Any = None
 
 try:
-    from opentelemetry import trace as otel_trace
-    from opentelemetry.metrics import get_meter as otel_get_meter
-    from opentelemetry.trace import Status as OtelStatus
-    from opentelemetry.trace import StatusCode as OtelStatusCode
+    otel_trace = import_module("opentelemetry.trace")
+    otel_metrics = import_module("opentelemetry.metrics")
+    otel_get_meter = otel_metrics.get_meter
+    OtelStatus = otel_trace.Status
+    OtelStatusCode = otel_trace.StatusCode
 
     HAS_OTEL = True
 except ImportError:

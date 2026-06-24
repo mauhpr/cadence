@@ -210,8 +210,7 @@ class Cadence(Generic[ScoreT]):
             self._wrap_with_timing(f"{name}_if[{i}]", task) for i, task in enumerate(true_tasks)
         ]
         wrapped_else = [
-            self._wrap_with_timing(f"{name}_else[{i}]", task)
-            for i, task in enumerate(false_tasks)
+            self._wrap_with_timing(f"{name}_else[{i}]", task) for i, task in enumerate(false_tasks)
         ]
         measure = BranchMeasure(
             self._score,
