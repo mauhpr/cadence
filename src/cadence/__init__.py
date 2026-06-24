@@ -19,8 +19,9 @@ Example:
         Cadence("checkout", OrderScore(order_id="123"))
         .then("fetch", fetch_items)
         .sync("enrich", [get_prices, get_stock])
-        .run()
     )
+
+    result = await cadence.run()
 """
 
 from cadence.cadence import Cadence
@@ -53,6 +54,7 @@ from cadence.exceptions import (
     NoteError,
     ParallelNoteError,
     RetryExhaustedError,
+    Skip,
     TimeoutError,
 )
 from cadence.hooks import (
@@ -87,7 +89,7 @@ from cadence.score import (
     merge_snapshots,
 )
 
-__version__ = "0.5.1"
+__version__ = "0.7.0"
 
 __all__ = [
     # Core
@@ -114,6 +116,7 @@ __all__ = [
     "CadenceError",
     "NoteError",
     "ParallelNoteError",
+    "Skip",
     "TimeoutError",
     "RetryExhaustedError",
     "CircuitOpenError",

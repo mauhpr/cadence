@@ -8,7 +8,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypeVar, cast
 
-from cadence.exceptions import ParallelNoteError
+from cadence.exceptions import ParallelNoteError, Skip
 from cadence.nodes.base import Measure
 from cadence.note import Note
 from cadence.score import MergeStrategy, Score, merge_snapshots
@@ -78,6 +78,8 @@ class ParallelMeasure(Measure[ScoreT]):
         """Wrap a coroutine to re-raise exceptions as ParallelNoteError."""
         try:
             return await coro
+        except Skip:
+            raise
         except ParallelNoteError:
             raise
         except Exception as e:

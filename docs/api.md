@@ -104,8 +104,8 @@ Add conditional branching.
 ```python
 cadence.split("route",
     condition=is_premium,
-    if_true=[premium_process],
-    if_false=[standard_process]
+    if_true=premium_process,
+    if_false=[standard_process, notify_team]
 )
 ```
 
@@ -113,8 +113,8 @@ cadence.split("route",
 |-----------|------|-------------|
 | `name` | `str` | Note name for the branch |
 | `condition` | `Callable[[ScoreT], bool]` | Function returning bool |
-| `if_true` | `list[Callable]` | Tasks to run if condition is True |
-| `if_false` | `list[Callable]` | Tasks to run if condition is False |
+| `if_true` | `Callable \| Sequence[Callable]` | Task or tasks to run if condition is True |
+| `if_false` | `Callable \| Sequence[Callable] \| None` | Task or tasks to run if condition is False |
 | `parallel` | `bool` | Execute branch tasks in parallel |
 
 **Returns:** `Cadence[ScoreT]`
@@ -217,6 +217,8 @@ Execute the cadence asynchronously.
 result = await cadence.run()
 ```
 
+`run()` must be awaited. Use `.run_sync()` when calling a cadence from synchronous code.
+
 **Returns:** `ScoreT` - The final score after all notes complete
 
 **Raises:** `CadenceError` if a note fails and no error handler is set
@@ -256,6 +258,9 @@ class MyScore(Score):
     user_id: str
     data: dict = None
 ```
+
+Score subclasses should be decorated with `@dataclass`. Cadence uses dataclass fields
+for score construction, copy-on-write snapshots, and merge conflict detection.
 
 Score provides copy-on-write semantics for parallel execution, ensuring each parallel task gets an isolated copy that is merged back after completion.
 
@@ -307,9 +312,23 @@ from cadence import note
 @note
 async def process_order(score: OrderScore) -> None:
     score.status = "processed"
+
+@note(name="charge", description="Charge the order")
+async def charge_order(score: OrderScore) -> None:
+    await payments.charge(score.order_id)
+
+@note(retry=2)
+async def retry_twice(score: OrderScore) -> None:
+    await api.call(score.order_id)
+
+@note(retry={"max_attempts": 3, "delay": 0.5, "backoff": "exponential"})
+async def retry_with_config(score: OrderScore) -> None:
+    await api.call(score.order_id)
 ```
 
-The decorator validates the function signature and provides metadata for observability.
+The decorator preserves the callable signature for static type checkers and provides
+metadata for observability. `retry=2` is shorthand for `max_attempts=2`; pass a dict
+to use the full `cadence.retry()` configuration.
 
 ---
 
@@ -320,8 +339,8 @@ Add automatic retry with exponential backoff.
 ```python
 from cadence import retry
 
-@retry(max_attempts=3, delay=1.0, backoff=2.0, exceptions=(ConnectionError,))
 @note
+@retry(max_attempts=3, delay=1.0, backoff="exponential", on=(ConnectionError,))
 async def call_api(score):
     score.data = await api.fetch()
 ```
@@ -330,8 +349,13 @@ async def call_api(score):
 |-----------|------|---------|-------------|
 | `max_attempts` | `int` | `3` | Maximum number of attempts |
 | `delay` | `float` | `1.0` | Initial delay between retries (seconds) |
-| `backoff` | `float` | `2.0` | Multiplier for delay after each retry |
-| `exceptions` | `tuple` | `(Exception,)` | Exception types to retry on |
+| `backoff` | `str` | `"fixed"` | `"fixed"`, `"linear"`, or `"exponential"` |
+| `max_delay` | `float` | `60.0` | Maximum delay between attempts |
+| `jitter` | `bool` | `True` | Add delay jitter |
+| `on` | `tuple[type[Exception], ...] \| None` | `None` | Exception types to retry on |
+
+When stacking with `@note`, put `@note` above `@retry` so the retry wrapper is part
+of the note callable.
 
 ---
 
@@ -563,6 +587,28 @@ Base exception for all cadence errors.
 ```python
 from cadence import CadenceError
 ```
+
+### Skip
+
+Cleanly stop the remaining cadence measures without treating the run as failed.
+
+```python
+from cadence import Skip, note
+
+@note
+async def dedupe(score: OrderScore) -> None:
+    if await duplicates.exists(score.order_id):
+        score.status = "duplicate"
+        raise Skip("duplicate order")
+```
+
+`Skip` does not invoke `.on_error()` handlers. `await cadence.run()` returns the
+current score after lifecycle hooks finish.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `reason` | `str` | Human-readable reason for stopping |
+| `code` | `str` | Always `"SKIP"` |
 
 ### NoteError
 

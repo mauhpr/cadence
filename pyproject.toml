@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cadence-orchestration"
-version = "0.5.1"
+version = "0.7.0"
 description = "A declarative Python framework for orchestrating service logic with rhythm and precision"
 readme = "README.md"
 license = "MIT"
@@ -69,6 +69,7 @@ dev = [
 fastapi = [
     "fastapi>=0.128.0",
     "starlette>=0.50.0",
+    "httpx>=0.28.1",
 ]
 opentelemetry = [
     "opentelemetry-api>=1.39.1",
@@ -86,6 +87,7 @@ diagram = [
 all = [
     "fastapi>=0.128.0",
     "starlette>=0.50.0",
+    "httpx>=0.28.1",
     "opentelemetry-api>=1.39.1",
     "opentelemetry-sdk>=1.39.1",
     "prometheus-client>=0.23.1",

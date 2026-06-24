@@ -32,7 +32,7 @@ Cadence lets you build complex orchestration — from checkout flows to LLM pipe
 - **Observability** - Hooks for logging, metrics, and tracing
 - **Event-Driven Architecture** - Structured domain events with listener registration and async support
 - **Workflow Checkpointing** - Crash recovery with pluggable checkpoint stores
-- **Type Safety** - Full type hints and generics support
+- **Type Safety** - Full type hints, generics support, and `py.typed`
 - **Zero Dependencies** - Core library has no required dependencies
 - **LLM Pipeline Ready** - Natural fit for RAG, tool calling, multi-agent, and model fallback chains
 - **LLM-Friendly DSL** - Constrained grammar that LLMs can generate correctly with minimal hallucination
@@ -63,6 +63,10 @@ pip install cadence-orchestration[all]
 ```
 
 ## Quick Start
+
+Score classes should inherit `Score` and be decorated with `@dataclass`.
+`Cadence.run()` is async, so always `await cadence.run()` inside async code or use
+`cadence.run_sync()` from synchronous code.
 
 ```python
 from dataclasses import dataclass
@@ -137,6 +141,8 @@ rag = (
     .sync("retrieve", [retrieve, web_search])   # parallel retrieval
     .then("generate", generate)                  # LLM call with retry + timeout
 )
+
+result = await rag.run()
 ```
 
 This is identical in shape to the service orchestration example above — same API, same resilience patterns, different domain.
@@ -183,11 +189,29 @@ cadence = (
     .split("route",
         condition=is_premium_customer,
         if_true=[priority_processing, express_shipping],
-        if_false=[standard_processing, regular_shipping]
+        if_false=standard_processing
     )
     .then("confirm", send_confirmation)
 )
 ```
+
+Use a single note for the common one-step branch, or a list for multiple notes.
+
+### Early Exit
+
+Stop the rest of a cadence cleanly by raising `Skip` inside a note:
+
+```python
+from cadence import Skip, note
+
+@note
+async def drop_duplicate(score: OrderScore) -> None:
+    if await seen_before(score.order_id):
+        score.status = "duplicate"
+        raise Skip("duplicate order")
+```
+
+`Skip` ends the run without invoking error handlers. The current score is returned.
 
 ### Child Cadences
 
@@ -213,11 +237,23 @@ checkout_cadence = (
 ```python
 from cadence import retry
 
-@retry(max_attempts=3, delay=1.0, backoff=2.0)
 @note
+@retry(max_attempts=3, delay=1.0, backoff="exponential")
 async def call_external_api(score):
     response = await http_client.get(score.api_url)
     score.data = response.json()
+```
+
+For note-local retry config, `@note` also accepts a shorthand:
+
+```python
+@note(retry=2)
+async def call_external_api(score):
+    score.data = await http_client.get_json(score.api_url)
+
+@note(retry={"max_attempts": 3, "delay": 0.5, "backoff": "exponential"})
+async def call_model(score):
+    score.answer = await llm.generate(score.prompt)
 ```
 
 ### Timeout

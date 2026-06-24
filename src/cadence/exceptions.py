@@ -43,6 +43,22 @@ class CadenceError(Exception):
         return f"CadenceError(code={self._code!r}, message={self._message!r})"
 
 
+class Skip(CadenceError):  # noqa: N818 - public API is intentionally cadence.Skip
+    """Cleanly stop the remaining cadence measures without treating it as a failure."""
+
+    def __init__(self, reason: str = "skipped") -> None:
+        super().__init__(
+            reason,
+            code="SKIP",
+            details={"reason": reason},
+        )
+        self._reason = reason
+
+    @property
+    def reason(self) -> str:
+        return self._reason
+
+
 class NoteError(CadenceError):
     """Error that occurred during note execution."""
 
