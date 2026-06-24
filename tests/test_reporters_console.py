@@ -922,6 +922,18 @@ class TestOptionalReporterImportPaths:
             assert metrics_requests[0][0]["headers"] == []
             assert metrics_requests[0][1]["type"] == "http.request"
             assert responses[-1]["body"] == b"metrics"
+
+            async def receive():
+                return {"type": "http.request", "body": b"existing", "more_body": False}
+
+            await middleware(
+                {"type": "http", "path": "/metrics", "headers": [(b"x-test", b"1")]},
+                receive,
+                send,
+            )
+
+            assert metrics_requests[1][0]["headers"] == [(b"x-test", b"1")]
+            assert metrics_requests[1][1]["body"] == b"existing"
         finally:
             monkeypatch.setattr(importlib, "import_module", real_import_module)
             importlib.reload(prom_module)

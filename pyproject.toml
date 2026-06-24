@@ -129,6 +129,7 @@ omit = [
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
+    "@overload",
     "raise NotImplementedError",
     "@abstractmethod",
     "if __name__ == .__main__.:",
