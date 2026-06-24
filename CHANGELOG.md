@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-24
+
+### Added
+
+- **Typed package marker**: Cadence ships as a typed package via `py.typed`
+- **`Skip` early-exit primitive**: Raise `cadence.Skip("reason")` inside a note to stop the remaining cadence cleanly without invoking error handlers
+- **`@note(retry=...)` shorthand**: Use `@note(retry=2)` for max-attempt retry or pass a dict for full retry configuration
+- **Single-task branch ergonomics**: `.split(..., if_true=note_fn, if_false=other_note)` now works without list wrapping
+
+### Changed
+
+- **`@note` typing**: Added overloads for bare `@note` and configured `@note(...)` forms so strict type checkers can distinguish the decorator shapes
+- **Task type aliases**: Updated task, condition, interrupt, and merge aliases to use `Awaitable` and real runtime return values instead of erasing behavior
+- **Runtime `run()` introspection**: `inspect.signature(Cadence.run)` now shows an awaitable coroutine return while the async method continues to return `ScoreT` when awaited
+- **Documentation**: Quickstart and API docs now consistently show `await cadence.run()`, document the score `@dataclass` requirement, and show both retry configuration forms
+
 ## [0.6.0] - 2026-03-29
 
 ### Added
@@ -191,7 +207,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom Exceptions**: `CadenceError`, `NoteError`, `TimeoutError`, `RetryExhaustedError`
 - Basic test suite with pytest and pytest-asyncio
 
-[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mauhpr/cadence/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mauhpr/cadence/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/mauhpr/cadence/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mauhpr/cadence/compare/v0.4.3...v0.5.0

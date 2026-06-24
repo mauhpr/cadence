@@ -5,12 +5,16 @@ from __future__ import annotations
 import functools
 import inspect
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, Generic, ParamSpec, TypeVar, overload
 
-F = TypeVar("F", bound=Callable[..., Any])
+P = ParamSpec("P")
+R = TypeVar("R")
+RetryConfig = int | dict[str, Any]
+TimeoutConfig = float | dict[str, Any]
+FallbackConfig = dict[str, Any]
 
 
-class Note:
+class Note(Generic[P, R]):
     """
     Wrapper for a note function with metadata.
 
@@ -21,7 +25,7 @@ class Note:
 
     def __init__(
         self,
-        fn: Callable[..., Any],
+        fn: Callable[P, R],
         *,
         name: str | None = None,
         description: str | None = None,
@@ -89,7 +93,7 @@ class Note:
         """Resilience configuration for this note (empty dict if none)."""
         return self._resilience
 
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return self._fn(*args, **kwargs)
 
     def __repr__(self) -> str:
@@ -99,15 +103,39 @@ class Note:
         return f"<Note: {self._name}>"
 
 
+@overload
 def note(
-    fn: F | None = None,
+    fn: Callable[P, R],
     *,
     name: str | None = None,
     description: str | None = None,
-    retry: int | dict[str, Any] | None = None,
-    timeout: float | dict[str, Any] | None = None,
-    fallback: dict[str, Any] | None = None,
-) -> Note | Callable[[F], Note]:
+    retry: RetryConfig | None = None,
+    timeout: TimeoutConfig | None = None,
+    fallback: FallbackConfig | None = None,
+) -> Note[P, R]: ...
+
+
+@overload
+def note(
+    fn: None = None,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    retry: RetryConfig | None = None,
+    timeout: TimeoutConfig | None = None,
+    fallback: FallbackConfig | None = None,
+) -> Callable[[Callable[P, R]], Note[P, R]]: ...
+
+
+def note(
+    fn: Callable[P, R] | None = None,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    retry: RetryConfig | None = None,
+    timeout: TimeoutConfig | None = None,
+    fallback: FallbackConfig | None = None,
+) -> Note[P, R] | Callable[[Callable[P, R]], Note[P, R]]:
     """
     Decorator to mark a function as a cadence note.
 
@@ -118,6 +146,12 @@ def note(
 
         @note(name="custom_name", description="Does something")
         async def my_task(score): ...
+
+        @note(retry=2)
+        async def flaky_task(score): ...
+
+        @note(retry={"max_attempts": 3, "backoff": "exponential"})
+        async def api_task(score): ...
 
     Resilience can be configured inline:
 
@@ -142,7 +176,7 @@ def note(
         A Note wrapper around the function
     """
 
-    def decorator(func: F) -> Note:
+    def decorator(func: Callable[P, R]) -> Note[P, R]:
         return Note(
             func,
             name=name,

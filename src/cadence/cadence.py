@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine, Sequence
 from typing import (
     Any,
     Generic,
@@ -13,7 +13,7 @@ from typing import (
 )
 
 from cadence.checkpoint import CheckpointHooks, CheckpointStore
-from cadence.exceptions import CadenceError, NoteError
+from cadence.exceptions import CadenceError, NoteError, Skip
 from cadence.hooks import CadenceHooks, HooksManager
 from cadence.nodes.base import Measure
 from cadence.nodes.branch import BranchMeasure
@@ -23,6 +23,7 @@ from cadence.nodes.sequence import SequenceMeasure
 from cadence.nodes.single import SingleMeasure
 from cadence.note import Note
 from cadence.score import MergeStrategy
+from cadence.types import Condition, ErrorHandler, Merge, Task, TimeReporter
 
 
 def _is_async_callable(obj: Any) -> bool:
@@ -39,12 +40,7 @@ def _is_async_callable(obj: Any) -> bool:
 ScoreT = TypeVar("ScoreT")
 ChildScoreT = TypeVar("ChildScoreT")
 
-# Type aliases for callbacks
-Task = Callable[[Any], Any]
-Condition = Callable[[Any], Any]
-Merge = Callable[[Any, Any], Any]
-TimeReporter = Callable[[str, float, Any], Any]
-ErrorHandler = Callable[[Any, Exception], Any]
+BranchTasks = Task[ScoreT] | Sequence[Task[ScoreT]]
 
 
 class Cadence(Generic[ScoreT]):
@@ -85,8 +81,8 @@ class Cadence(Generic[ScoreT]):
         self._name = name
         self._score = score
         self._measures: list[Measure[ScoreT]] = []
-        self._time_reporter: TimeReporter | None = None
-        self._error_handler: ErrorHandler | None = None
+        self._time_reporter: TimeReporter[ScoreT] | None = None
+        self._error_handler: ErrorHandler[ScoreT] | None = None
         self._stop_on_error: bool = True
         self._hooks_manager: HooksManager = HooksManager()
         self._checkpoint_hooks: CheckpointHooks | None = None
@@ -98,7 +94,7 @@ class Cadence(Generic[ScoreT]):
     def then(
         self,
         name: str,
-        task: Task,
+        task: Task[ScoreT],
         *,
         can_interrupt: bool = False,
     ) -> Cadence[ScoreT]:
@@ -126,7 +122,7 @@ class Cadence(Generic[ScoreT]):
     def sequence(
         self,
         name: str,
-        tasks: list[Task],
+        tasks: Sequence[Task[ScoreT]],
     ) -> Cadence[ScoreT]:
         """
         Add multiple tasks to execute sequentially.
@@ -148,7 +144,7 @@ class Cadence(Generic[ScoreT]):
     def sync(
         self,
         name: str,
-        tasks: list[Task],
+        tasks: Sequence[Task[ScoreT]],
         *,
         merge_strategy: Callable[..., Any] = MergeStrategy.fail_on_conflict,
     ) -> Cadence[ScoreT]:
@@ -189,9 +185,9 @@ class Cadence(Generic[ScoreT]):
     def split(
         self,
         name: str,
-        condition: Condition,
-        if_true: list[Task],
-        if_false: list[Task] | None = None,
+        condition: Condition[ScoreT],
+        if_true: BranchTasks[ScoreT],
+        if_false: BranchTasks[ScoreT] | None = None,
         *,
         parallel: bool = False,
     ) -> Cadence[ScoreT]:
@@ -208,12 +204,13 @@ class Cadence(Generic[ScoreT]):
         Returns:
             self for chaining
         """
+        true_tasks = self._coerce_tasks(if_true)
+        false_tasks = self._coerce_tasks(if_false)
         wrapped_if = [
-            self._wrap_with_timing(f"{name}_if[{i}]", task) for i, task in enumerate(if_true)
+            self._wrap_with_timing(f"{name}_if[{i}]", task) for i, task in enumerate(true_tasks)
         ]
         wrapped_else = [
-            self._wrap_with_timing(f"{name}_else[{i}]", task)
-            for i, task in enumerate(if_false or [])
+            self._wrap_with_timing(f"{name}_else[{i}]", task) for i, task in enumerate(false_tasks)
         ]
         measure = BranchMeasure(
             self._score,
@@ -230,7 +227,7 @@ class Cadence(Generic[ScoreT]):
         self,
         name: str,
         cadence: Cadence[ChildScoreT],
-        merge: Merge,
+        merge: Merge[ScoreT, ChildScoreT],
     ) -> Cadence[ScoreT]:
         """
         Compose a child cadence.
@@ -249,7 +246,7 @@ class Cadence(Generic[ScoreT]):
 
     def with_reporter(
         self,
-        reporter: TimeReporter,
+        reporter: TimeReporter[ScoreT],
     ) -> Cadence[ScoreT]:
         """
         Add a time reporter for observability.
@@ -270,7 +267,7 @@ class Cadence(Generic[ScoreT]):
 
     def on_error(
         self,
-        handler: ErrorHandler,
+        handler: ErrorHandler[ScoreT],
         *,
         stop: bool = True,
     ) -> Cadence[ScoreT]:
@@ -395,6 +392,11 @@ class Cadence(Generic[ScoreT]):
                 if result is True:
                     break
 
+            except Skip:
+                note_elapsed = time.perf_counter() - note_start
+                await self._hooks_manager.after_note(measure.name, self._score, note_elapsed)
+                break
+
             except CadenceError as error:
                 # Call after_note hooks (with error)
                 note_elapsed = time.perf_counter() - note_start
@@ -474,8 +476,8 @@ class Cadence(Generic[ScoreT]):
     def _wrap_with_timing(
         self,
         name: str,
-        task: Task,
-    ) -> Task:
+        task: Task[ScoreT],
+    ) -> Task[ScoreT]:
         """Wrap a task with timing reporting."""
         if not self._time_reporter:
             return task
@@ -506,5 +508,19 @@ class Cadence(Generic[ScoreT]):
 
             return timed_sync
 
+    @staticmethod
+    def _coerce_tasks(tasks: BranchTasks[ScoreT] | None) -> list[Task[ScoreT]]:
+        if tasks is None:
+            return []
+        if callable(tasks):
+            return [tasks]
+        return list(tasks)
+
     def __repr__(self) -> str:
         return f"<Cadence: {self._name} ({len(self._measures)} measures)>"
+
+
+_run_signature = inspect.signature(Cadence.run)
+Cadence.run.__signature__ = _run_signature.replace(  # type: ignore[attr-defined]
+    return_annotation=Coroutine[Any, Any, ScoreT],  # type: ignore[valid-type]
+)

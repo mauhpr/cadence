@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from importlib import import_module
 from typing import Any, TypeVar
 
+PrometheusCounter: Any = None
+PrometheusGauge: Any = None
+PrometheusHistogram: Any = None
+_prometheus_client: Any = None
+
 try:
-    from prometheus_client import Counter, Gauge, Histogram  # type: ignore[import-not-found]
+    _prometheus_client = import_module("prometheus_client")
+    PrometheusCounter = _prometheus_client.Counter
+    PrometheusGauge = _prometheus_client.Gauge
+    PrometheusHistogram = _prometheus_client.Histogram
 
     HAS_PROMETHEUS = True
 except ImportError:
     HAS_PROMETHEUS = False
-    Counter = None
-    Gauge = None
-    Histogram = None
 
 ScoreT = TypeVar("ScoreT")
 
@@ -29,12 +35,12 @@ def _check_prometheus() -> None:
 
 # Default metrics (created lazily)
 _metrics_initialized = False
-_step_duration: Histogram | None = None
-_step_count: Counter | None = None
-_step_errors: Counter | None = None
-_flow_duration: Histogram | None = None
-_flow_count: Counter | None = None
-_active_flows: Gauge | None = None
+_step_duration: Any | None = None
+_step_count: Any | None = None
+_step_errors: Any | None = None
+_flow_duration: Any | None = None
+_flow_count: Any | None = None
+_active_flows: Any | None = None
 
 
 def _init_metrics(prefix: str = "cadence") -> None:
@@ -47,39 +53,39 @@ def _init_metrics(prefix: str = "cadence") -> None:
 
     _check_prometheus()
 
-    _step_duration = Histogram(
+    _step_duration = PrometheusHistogram(
         f"{prefix}_step_duration_seconds",
         "Duration of flow step execution in seconds",
         ["flow", "step"],
         buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
     )
 
-    _step_count = Counter(
+    _step_count = PrometheusCounter(
         f"{prefix}_step_total",
         "Total number of step executions",
         ["flow", "step", "status"],
     )
 
-    _step_errors = Counter(
+    _step_errors = PrometheusCounter(
         f"{prefix}_step_errors_total",
         "Total number of step errors",
         ["flow", "step", "error_type"],
     )
 
-    _flow_duration = Histogram(
+    _flow_duration = PrometheusHistogram(
         f"{prefix}_flow_duration_seconds",
         "Duration of complete flow execution in seconds",
         ["flow"],
         buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
     )
 
-    _flow_count = Counter(
+    _flow_count = PrometheusCounter(
         f"{prefix}_flow_total",
         "Total number of flow executions",
         ["flow", "status"],
     )
 
-    _active_flows = Gauge(
+    _active_flows = PrometheusGauge(
         f"{prefix}_active_flows",
         "Number of currently executing flows",
         ["flow"],
@@ -254,11 +260,10 @@ class MetricsMiddleware:
         path: str = "/metrics",
     ) -> None:
         _check_prometheus()
-        from prometheus_client import make_asgi_app
 
         self.app = app
         self.path = path
-        self._metrics_app = make_asgi_app()
+        self._metrics_app = _prometheus_client.make_asgi_app()
 
     async def __call__(
         self,
@@ -267,6 +272,12 @@ class MetricsMiddleware:
         send: Callable[..., Any],
     ) -> None:
         if scope["type"] == "http" and scope["path"] == self.path:
-            await self._metrics_app(scope, receive, send)
+            metrics_scope = scope if "headers" in scope else {**scope, "headers": []}
+            if receive is None:
+
+                async def receive() -> dict[str, Any]:
+                    return {"type": "http.request", "body": b"", "more_body": False}
+
+            await self._metrics_app(metrics_scope, receive, send)
         else:
             await self.app(scope, receive, send)

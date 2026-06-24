@@ -3,21 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from importlib import import_module
 from typing import Any, TypeVar
 
+otel_trace: Any = None
+otel_get_meter: Any = None
+OtelStatus: Any = None
+OtelStatusCode: Any = None
+
 try:
-    from opentelemetry import trace  # type: ignore[import-not-found]
-    from opentelemetry.metrics import get_meter  # type: ignore[import-not-found]
-    from opentelemetry.trace import Span, Status, StatusCode  # type: ignore[import-not-found]
+    otel_trace = import_module("opentelemetry.trace")
+    otel_metrics = import_module("opentelemetry.metrics")
+    otel_get_meter = otel_metrics.get_meter
+    OtelStatus = otel_trace.Status
+    OtelStatusCode = otel_trace.StatusCode
 
     HAS_OTEL = True
 except ImportError:
     HAS_OTEL = False
-    trace = None
-    get_meter = None
-    Span = None
-    Status = None
-    StatusCode = None
 
 ScoreT = TypeVar("ScoreT")
 
@@ -79,9 +82,9 @@ class OpenTelemetryReporter:
         self.include_timing = include_timing
 
         # Get tracer and meter
-        self._tracer = trace.get_tracer(tracer_name or service_name)
+        self._tracer = otel_trace.get_tracer(tracer_name or service_name)
         if include_timing:
-            self._meter = get_meter(meter_name or service_name)
+            self._meter = otel_get_meter(meter_name or service_name)
             self._duration_histogram = self._meter.create_histogram(
                 name="cadence.step.duration",
                 description="Duration of flow step execution",
@@ -92,7 +95,7 @@ class OpenTelemetryReporter:
                 description="Number of step executions",
             )
 
-        self._current_spans: dict[str, Span] = {}
+        self._current_spans: dict[str, Any] = {}
 
     def __call__(
         self,
@@ -138,7 +141,7 @@ class OpenTelemetryReporter:
                     },
                 )
 
-    def _add_score_attributes(self, span: Span, score: ScoreT) -> None:
+    def _add_score_attributes(self, span: Any, score: ScoreT) -> None:
         """Add score fields as span attributes."""
         if hasattr(score, "__dataclass_fields__"):
             for field_name in score.__dataclass_fields__:
@@ -214,8 +217,8 @@ class TracingContext:
         _check_otel()
         self.operation_name = operation_name
         self.attributes = attributes or {}
-        self._tracer = trace.get_tracer(service_name)
-        self._span: Span | None = None
+        self._tracer = otel_trace.get_tracer(service_name)
+        self._span: Any | None = None
 
     def __enter__(self) -> TracingContext:
         self._span = self._tracer.start_span(
@@ -227,10 +230,10 @@ class TracingContext:
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self._span:
             if exc_type is not None:
-                self._span.set_status(Status(StatusCode.ERROR, str(exc_val)))
+                self._span.set_status(OtelStatus(OtelStatusCode.ERROR, str(exc_val)))
                 self._span.record_exception(exc_val)
             else:
-                self._span.set_status(Status(StatusCode.OK))
+                self._span.set_status(OtelStatus(OtelStatusCode.OK))
             self._span.end()
 
     def set_attribute(self, key: str, value: Any) -> None:
