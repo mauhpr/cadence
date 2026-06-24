@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-06-24
+
+### Fixed
+
+- Re-released the finalized v0.7 package artifacts to PyPI after the v0.7.0
+  upload was cut before the merged release commit.
+- Ensures the published package includes the final reporter import fixes,
+  inline `@note` resilience options, typed package marker, and v0.7 test/docs
+  coverage from the merged release branch.
+
 ## [0.7.0] - 2026-06-24
 
 ### Added
@@ -207,7 +217,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Custom Exceptions**: `CadenceError`, `NoteError`, `TimeoutError`, `RetryExhaustedError`
 - Basic test suite with pytest and pytest-asyncio
 
-[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mauhpr/cadence/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/mauhpr/cadence/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mauhpr/cadence/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mauhpr/cadence/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/mauhpr/cadence/compare/v0.5.0...v0.5.1
