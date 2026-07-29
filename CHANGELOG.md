@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-07-29
+
+### Added
+
+- Adds a manual TestPyPI workflow that builds once, smoke-tests the installed
+  wheel, and publishes the transferred artifacts through Trusted Publishing.
+- Adds Dependabot configuration and a private security reporting policy.
+- Adds a regression test requiring `pyproject.toml`, `cadence.__version__`, and
+  `cadence --version` to agree.
+
+### Changed
+
+- Replaces the obsolete token and Twine release checklist with an OIDC Trusted
+  Publishing process.
+- Hardens production publishing with immutable action pins, minimal
+  permissions, checkout credential isolation, disabled production artifact
+  caching, artifact attestations, and installed-wheel verification.
+- Hardens test and quality workflows while preserving the existing `src/`
+  Ruff boundary.
+- Upgrades the Code of Conduct to Contributor Covenant 2.1 with an explicit
+  private reporting path.
+
+### Fixed
+
+- Makes `cadence --version` read `cadence.__version__` instead of reporting the
+  stale version 0.3.0.
+- Uses the published `cadence-orchestration` package name in generated projects
+  and Prometheus installation guidance.
+
 ## [0.7.1] - 2026-06-24
 
 ### Fixed
