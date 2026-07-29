@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from textwrap import dedent
 
+from cadence import __version__
+
 
 def init_command(args: argparse.Namespace) -> int:
     """Initialize a new Cadence project."""
@@ -119,7 +121,7 @@ def init_command(args: argparse.Namespace) -> int:
             name = "{project_name}"
             version = "0.1.0"
             dependencies = [
-                "cadence-flow",
+                "cadence-orchestration",
             ]
 
             [project.optional-dependencies]
@@ -440,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.3.0",
+        version=f"%(prog)s {__version__}",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")

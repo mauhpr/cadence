@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Coroutine
 from dataclasses import dataclass
+from pathlib import Path
 from typing import get_args, get_origin
 
 import pytest
 
-from cadence import Cadence, Score, Skip, note
+from cadence import Cadence, Score, Skip, __version__, note
+from cadence.cli import main
 
 
 @dataclass
@@ -22,6 +25,19 @@ class FeedbackScore(Score):
 class PlainFeedbackScore:
     value: int = 0
     skipped: bool = False
+
+
+def test_release_versions_are_consistent(capsys: pytest.CaptureFixture[str]) -> None:
+    """Package metadata, import version, and CLI output must agree."""
+    metadata = Path("pyproject.toml").read_text()
+    version_match = re.search(r'(?m)^version = "([^"]+)"$', metadata)
+
+    assert version_match is not None
+    assert __version__ == version_match.group(1)
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--version"])
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"cadence {__version__}"
 
 
 @note

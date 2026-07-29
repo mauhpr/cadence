@@ -29,7 +29,7 @@ def _check_prometheus() -> None:
     if not HAS_PROMETHEUS:
         raise ImportError(
             "prometheus_client is required for this reporter. "
-            "Install it with: pip install cadence-flow[prometheus]"
+            "Install it with: pip install cadence-orchestration[prometheus]"
         )
 
 
